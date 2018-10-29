@@ -1,0 +1,17 @@
+{
+  "name": "airblast",
+  "version": "0.1.0",
+  "description": "Quick setup Google Datastore & Pubsub processing",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm test"
+  },
+  "keywords": [
+    "google",
+    "datastore",
+    "pubsub",
+    "queue"
+  ],
+  "author": "Raisely <engineering@raisely.com> (https://github.com/raisely)",
+  "license": "ISC"
+}

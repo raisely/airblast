@@ -1,0 +1,23 @@
+{
+    "parser": "babel-eslint",
+    "env": {
+        "node": true,
+        "es6": true,
+        "mocha": true
+    },
+    "globals": {
+        "afterRoute": true
+    },
+    "extends": "airbnb-base",
+    "rules": {
+      "strict": [0, "global"],
+      "require-yield": "off",
+      "indent": [2, "tab", { "SwitchCase": 1, "VariableDeclarator": 1 }],
+      "no-tabs": 0,
+      "no-use-before-define": ["error", "nofunc"],
+      "no-plusplus": ["error", { "allowForLoopAfterthoughts": true }],
+      "no-param-reassign": ["error", { "props": false }],
+      "camelcase": ["error", { "properties": "always" }],
+      "no-restricted-syntax": ["error", "ForInStatement", "LabeledStatement", "WithStatement"]
+    }
+}
