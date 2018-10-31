@@ -1,7 +1,7 @@
 {
   "name": "airblast",
   "version": "0.1.0",
-  "description": "Quick setup Google Datastore & Pubsub processing",
+  "description": "Robust cloud function job processors up in minutes",
   "main": "index.js",
   "scripts": {
     "test": "npm test"
@@ -13,5 +13,25 @@
     "queue"
   ],
   "author": "Raisely <engineering@raisely.com> (https://github.com/raisely)",
-  "license": "ISC"
+  "license": "NoHarm",
+  "dependencies": {
+    "@google-cloud/datastore": "^1.4.0",
+    "@google-cloud/error-reporting": "^0.5.1",
+    "@google-cloud/pubsub": "^0.18.0",
+    "lodash": "^4.17.11",
+    "promise-retry": "^1.1.1",
+    "serialize-error": "^3.0.0",
+    "timezonecomplete": "^5.6.2",
+    "uuid": "^3.3.2"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-eslint": "^8.2.3",
+    "babel-preset-env": "^1.6.1",
+    "eslint": "^4.16.0",
+    "eslint-config-airbnb-base": "^12.1.0",
+    "eslint-plugin-import": "^2.8.0",
+    "google-datastore-emulator": "^2.0.0",
+    "google-pubsub-emulator": "^2.0.2"
+  }
 }
