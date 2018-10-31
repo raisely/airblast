@@ -30,10 +30,13 @@
     "babel-cli": "^6.26.0",
     "babel-eslint": "^8.2.3",
     "babel-preset-env": "^1.6.1",
+    "chai": "^4.2.0",
     "eslint": "^4.16.0",
     "eslint-config-airbnb-base": "^12.1.0",
     "eslint-plugin-import": "^2.8.0",
     "google-datastore-emulator": "^2.0.0",
-    "google-pubsub-emulator": "^2.0.2"
+    "google-pubsub-emulator": "^2.0.2",
+    "mocha": "^5.2.0",
+    "nock": "^10.0.1"
   }
 }
