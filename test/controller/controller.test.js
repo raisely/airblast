@@ -58,8 +58,6 @@ describe('AirblastController', () => {
 			let subscription;
 
 			before(async () => {
-				await pubsub.createTopic('Empty');
-
 				const req = createPostReq(eventData);
 				const controller = new EmptyController();
 
@@ -95,7 +93,7 @@ describe('AirblastController', () => {
 			});
 		});
 
-		describe.only('with hooks', () => {
+		describe('with hooks', () => {
 			const hooks = {};
 			const eventData = {
 				format: 'text',

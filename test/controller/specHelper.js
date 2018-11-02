@@ -1,7 +1,7 @@
 const DatastoreEmulator = require('google-datastore-emulator');
 const PubSubEmulator = require('google-pubsub-emulator');
 
-const queues = ['Empty', 'Hooked'];
+const queues = ['Empty'];
 
 const emulators = [];
 
@@ -26,7 +26,7 @@ before(function before() {
 	emulators.push(new PubSubEmulator({
 		clean: true,
 		dataDir: './tmp/pubsub',
-		// topics: queues,
+		topics: queues,
 	}));
 	return Promise.all(emulators.map(e => e.start()));
 });
