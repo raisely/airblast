@@ -132,7 +132,8 @@ describe('AirblastController', () => {
 			before(async () => {
 				const controller = new EmptyController();
 
-				container.recordKey = await setupRecord(datastore, controller, 'Empty', eventData);
+				container.recordKey = await setupRecord(datastore, 'Empty', eventData);
+				await sendPubsubPayload(controller, container.recordKey, 'Empty');
 				container.datastore = datastore;
 			});
 			itMarksTheRecordProcessed(container);
@@ -153,7 +154,8 @@ describe('AirblastController', () => {
 				hooks.concat(['validate', 'beforeSave', 'afterSave']
 					.map(hook => sinon.spy(controller, hook)));
 
-				container.recordKey = await setupRecord(datastore, controller, 'Hooked', eventData);
+				container.recordKey = await setupRecord(datastore, 'Hooked', eventData);
+				await sendPubsubPayload(controller, container.recordKey, 'Empty');
 				container.datastore = datastore;
 			});
 
@@ -180,7 +182,8 @@ describe('AirblastController', () => {
 
 				before(async () => {
 					controller.process = () => throw firstError;
-					recordKey = await setupRecord(datastore, controller, 'Hooked', eventData);
+					recordKey = await setupRecord(datastore, 'Hooked', eventData);
+					await sendPubsubPayload(controller, recordKey, 'Empty');
 				});
 
 				it('should set lastError', async () => {
@@ -199,9 +202,10 @@ describe('AirblastController', () => {
 
 				before(async () => {
 					controller.process = () => throw secondError;
-					recordKey = await setupRecord(datastore, controller, 'Hooked', eventData, {
+					recordKey = await setupRecord(datastore, 'Hooked', eventData, {
 						firstError, lastError: firstError,
 					});
+					await sendPubsubPayload(controller, recordKey, 'Empty');
 				});
 
 				it('should set lastError', async () => {
@@ -216,18 +220,131 @@ describe('AirblastController', () => {
 	});
 
 	describe('retry', () => {
-		describe('WHEN record just failed', () => {
-			it('should set nextAttempt');
-			it('should increment retries');
-			it('should not enqueue');
-		});
-		describe('WHEN record is at nextAttempt', () => {
-			it('should requeue', () => {});
-			it('should not change the record', () => {});
-		});
-		describe('WHEN record has exceeded retries', () => {
-			it('should mark the record failed', () => {
+		const eventData = {
+			do: 'the time warp',
+			frequency: 'again',
+		};
+		let messages;
+		let subscription;
+		let controller;
+		// To set something to ten minutes ago, subtract 10 minutes and 1 ms so
+		// it definitely passes the condition
+		const TEN_MINUTES = (10 * 60 * 1000) + 1;
 
+		before(() => {
+			controller = new EmptyController();
+		});
+
+		describe('WHEN record is just created', () => {
+			const container = {};
+
+			before(async () => {
+				container.recordKey = await setupRecord(datastore, 'Empty', eventData, {
+				});
+
+				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
+				({ subscription, messages } = subscriptionDetails);
+				container.messages = messages;
+				await runRequest(controller, 'httpRetry', createPostReq({}));
+			});
+			after(() => subscription.delete());
+
+			itDoesNotPublish(container);
+			itDoesNotChangeTheRecord(container);
+		});
+
+		describe('WHEN record never attempted', () => {
+			const container = {};
+
+			before(async () => {
+				container.recordKey = await setupRecord(datastore, 'Empty', eventData, {
+					createdAt: new Date(new Date() - TEN_MINUTES),
+				});
+
+				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
+				({ subscription, messages } = subscriptionDetails);
+				container.messages = messages;
+
+				await runRequest(controller, 'httpRetry', createPostReq({}));
+			});
+			after(() => subscription.delete());
+
+			itPublishes(container);
+			itDoesNotChangeTheRecord(container);
+		});
+
+		describe('WHEN record has just failed', () => {
+			const container = {};
+			before(async () => {
+				container.recordKey = await setupRecord(datastore, 'Empty', eventData, {
+					createdAt: new Date(new Date() - (TEN_MINUTES * 2)),
+					lastAttempt: new Date(new Date() - (TEN_MINUTES * 2)),
+					nextAttempt: new Date(new Date() - TEN_MINUTES - 5),
+				});
+
+				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
+				({ subscription, messages } = subscriptionDetails);
+				container.messages = messages;
+
+				await runRequest(controller, 'httpRetry', createPostReq({}));
+			});
+			after(() => subscription.delete());
+
+			it('should set nextAttempt', async () => {
+				const { recordKey } = container;
+				const [record] = await datastore.get(recordKey);
+				expect(record.nextAttempt > record.lastAttempt, 'nextAttempt > lastAttempt');
+				expect(record.processedAt, 'processedAt').to.not.eq(null);
+				container.record = record;
+			});
+			it('should increment retries', () => {
+				expect(container.record.retries).to.eq(1);
+			});
+			itDoesNotPublish(container);
+		});
+
+		describe('WHEN record is at nextAttempt', () => {
+			const container = {};
+			const recordMeta = {
+				createdAt: new Date(new Date() - (TEN_MINUTES * 3)),
+				lastAttempt: new Date(new Date() - (TEN_MINUTES * 3)),
+				nextAttempt: new Date(new Date()),
+				retries: 1,
+			};
+			before(async () => {
+				container.recordKey = await setupRecord(datastore, 'Empty', eventData, recordMeta);
+
+				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
+				({ subscription, messages } = subscriptionDetails);
+				container.messages = messages;
+
+				await runRequest(controller, 'httpRetry', createPostReq({}));
+			});
+			after(() => subscription.delete());
+
+			itPublishes(container);
+			it('should not change the record', async () => {
+				const [record] = await container.datastore.get(container.recordKey);
+				expect(record).to.deep.eq(recordMeta);
+			});
+		});
+
+		describe('WHEN record has exceeded retries', () => {
+			before(async () => {
+				container.recordKey = await setupRecord(datastore, 'Empty', eventData, );
+
+				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
+				({ subscription, messages } = subscriptionDetails);
+				container.messages = messages;
+
+				await runRequest(controller, 'httpRetry', createPostReq({}));
+			});
+			after(() => subscription.delete());
+
+			itDoesNotPublish(container);
+			it('should mark the record failed', () => {
+				const [record] = await container.datastore.get(container.recordKey);
+				expect(record.failedAt).to.not.eq(null);
 			});
 		});
 	});
@@ -262,6 +379,16 @@ async function runRequest(fn, req) {
 	return res;
 }
 
+function itDoesNotChangeTheRecord(container) {
+	it('should not change the record', async () => {
+		const [record] = await container.datastore.get(container.recordKey);
+		expect(record).to.deep.eq({
+			nextAttempt: null,
+			retries: 0,
+		});
+	});
+}
+
 function itCallsHook(spies, name, expectedOpts) {
 	it(`calls ${name}`, () => {
 		expect(spies[name]).to.have.been.called();
@@ -282,11 +409,7 @@ function itCallsHook(spies, name, expectedOpts) {
 function itSavesAndPublishes(datastore, eventData, messages, recordContainer = {}) {
 	let recordKey;
 
-	it('queues payload in pubsub', () => {
-		expect(messages).to.have.length(1);
-		expect(messages[0]).to.have.keys(['key']);
-		recordKey = messages[0].key;
-	});
+	itPublishes(Object.assign({ messages }, recordContainer));
 	it('saves payload to datastore', () => {
 		if (!recordKey) throw new Error('recordKey is null. (maybe past step failed)');
 
@@ -299,7 +422,27 @@ function itSavesAndPublishes(datastore, eventData, messages, recordContainer = {
 	});
 }
 
-async function setupRecord(datastore, controller, name, payload, defaults) {
+function itPublishes(container) {
+	it('queues payload in pubsub', () => {
+		expect(container.messages).to.have.length(1);
+		expect(container.messages[0]).to.have.keys(['key']);
+		if (container.recordKey) {
+			expect(container.messages[0].key).to.deep.eq(container.recordKey);
+		} else {
+			container.recordKey = container.messages[0].key;
+		}
+	});
+}
+
+function itDoesNotPublish(container) {
+	it('should not enqueue the record', async () => {
+		// Give time for pubsub to publish something if its there
+		await asyncTimeout(500);
+		expect(container.messages).to.have.length(0);
+	});
+}
+
+async function setupRecord(datastore, name, payload, defaults) {
 	const record = Object.assign({
 		data: JSON.stringify(payload),
 		createdAt: new Date(),
@@ -317,6 +460,10 @@ async function setupRecord(datastore, controller, name, payload, defaults) {
 		excludeFromIndexes: ['data'],
 	});
 
+	return recordKey;
+}
+
+async function sendPubsubPayload(controller, recordKey, name) {
 	const pubsubPayload = {
 		data: Buffer.from(JSON.stringify({
 			key: recordKey,
@@ -324,7 +471,9 @@ async function setupRecord(datastore, controller, name, payload, defaults) {
 		})),
 	};
 
-	await controller.pubsubMessage(pubsubPayload);
+	return controller.pubsubMessage(pubsubPayload);
+}
 
-	return recordKey;
+async function asyncTimeout(time) {
+	return new Promise(resolve => setTimeout(resolve, time));
 }
