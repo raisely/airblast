@@ -5,6 +5,8 @@ const _ = require('lodash');
 const Datastore = require('./services/datastore');
 const Pubsub = require('./services/pubsub');
 
+const { AppError } = require('./helpers/errors');
+
 // Special properties
 // createdAt The date the record was created
 // nextAttempt The next time a record should be attempted
@@ -20,19 +22,29 @@ const DEFAULT_RETRY = [0.5, 1, 2, 12, 24, 48, 96, 168];
 
 class AirblastController {
 	constructor(opts) {
-		this.name = opts.name;
-		if (!opts.name) {
+		const options = Object.assign({}, opts, this.constructor.options);
+		this.options = options;
+
+		this.name = options.name;
+		if (!options.name) {
 			let { name } = this.constructor;
 			if (name.endsWith('Controller')) name = name.slice(0, -10);
 			this.name = name;
 		}
-		this.topic = opts.topic || this.name;
-		this.kind = opts.kind || this.name;
-		this.retries = opts.retries || DEFAULT_RETRY;
-		this.maxProcessingTime = opts.masProcessingTime || 5 * 60;
+		this.topic = options.topic || this.name;
+		this.kind = options.kind || this.name;
+		this.retries = options.retries || DEFAULT_RETRY;
+		this.maxProcessingTime = options.masProcessingTime || 5 * 60;
+		this.log = options.log;
 
-		this.datastore = new Datastore(opts.datastore || {});
-		this.pubsub = new Pubsub(opts.pubsub || {});
+		this.datastore = new Datastore(options.datastore || {});
+		this.pubsub = new Pubsub(options.pubsub || {});
+
+		if (options.authenticate) {
+			this.authenticate = _.isString(options.authenticate) ?
+				(token => (token === options.authenticate)) :
+				options.authenticate;
+		}
 
 		// Bind http requests to this controller instance
 		['http', 'httpRetry'].forEach((method) => {
@@ -44,11 +56,13 @@ class AirblastController {
 		await this.hook('beforeSave', { data });
 
 		// Save to datastore
-		const key = this.datastore.save(this.kind, data, { runAt });
+		const { key, record } = this.datastore.save(this.kind, data, { runAt });
 
 		let pubsubId;
 		// If not delayed, run immediately
 		if (!runAt) pubsubId = this.pubsub.publish(this.topic, key, this.name);
+
+		this.log(`(${this.name} ${record.uuid}) Record saved and queued`);
 
 		// Publish
 		await this.hook('afterSave', { key, data, pubsubId });
@@ -78,7 +92,7 @@ class AirblastController {
 			throw new Error(`Received pubsub message not meant for this controller (message name: ${input.name}, controller name: ${this.name})`);
 		}
 
-		const record = this.datastore.load(pubsubMessage.key);
+		const record = this.datastore.get(pubsubMessage.key);
 
 		// Avoid repeat processing
 		if (record.processedAt) return;
@@ -90,11 +104,14 @@ class AirblastController {
 				lastAttempt: new Date(),
 			});
 
+			this.log(`(${this.name} ${record.uuid}) Record processing ...`);
 			await this.hook('process', { record, data: record.data });
 
 			// update processedAt
 			record.processedAt = new Date();
 		} catch (e) {
+			this.log(`(${this.name} ${record.uuid}) Processing error`);
+			// eslint-disable-next-line no-console
 			console.error(e);
 
 			// Save any errors encountered
@@ -105,6 +122,7 @@ class AirblastController {
 		}
 
 		await this.datastore.update(pubsubMessage.key, record);
+		this.log(`(${this.name} ${record.uuid}) Record processed`);
 
 		await this.hook('afterProcess', { record, data: record.data });
 	}
@@ -151,6 +169,8 @@ class AirblastController {
 				const newTime = new tc.DateTime(record.lastAttempt.toISOString()).add(tc.hours(interval));
 				record.nextAttempt = new Date(newTime.toIsoString());
 				record.retries += 1;
+
+				this.log(`(${this.name} ${record.uuid}) Record scheduled for retry #${record.retries}`);
 			} else {
 				record.failedAt = record.lastAttempt;
 			}
@@ -168,6 +188,8 @@ class AirblastController {
 				{ key: record[this.datastore.getDatastore().KEY] },
 				this.name,
 			);
+
+			this.log(`(${this.name} ${record.uuid}) Record retry queued`);
 		}
 	}
 
@@ -191,8 +213,19 @@ class AirblastController {
 
 			const auth = req.headers.authorization || req.headers.Authorization;
 
-			if (doAuth && (!auth || auth !== `Bearer ${config.token}`)) {
-				throw new AppError(401, 'unauthorized', 'The token provided is not valid.');
+			if (this.authenticate) {
+				const [bearer, token] = auth ? auth.split(' ') : ['bearer', null];
+
+				if (bearer.toLowerCase() !== 'bearer') {
+					throw new AppError(401, 'unauthorized', 'Unknown authorization type (expected Authorization: bearer)');
+				}
+				if (!(token && this.authenticate(token))) {
+					throw new AppError(401, 'Unauthorized', 'The token provided is not valid');
+				}
+
+				if (!(auth && (await this.authenticate(token)))) {
+					throw new AppError(401, 'unauthorized', 'The token provided is not valid.');
+				}
 			}
 
 			const handler = name || req.method.toLowerCase();
@@ -203,7 +236,8 @@ class AirblastController {
 
 			res.status(result.status).send(result.body);
 		} catch (error) {
-			console.error(error.stack);
+			// eslint-disable-next-line no-console
+			console.error(error);
 			res.status(error.status || 500).send(error.body);
 		}
 	}
