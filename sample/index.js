@@ -5,6 +5,9 @@ const Controllers = require('./controllers');
 const config = {
 	datastore: {},
 	pubsub: {},
+	// Authenticate can also be a function
+	authenticate: 'SECRET_TOKEN',
+	log: console.log,
 };
 
 const controllers = Controllers(config);
