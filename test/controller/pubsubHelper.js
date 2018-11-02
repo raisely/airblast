@@ -23,7 +23,7 @@
   * await subscription.delete();
   */
 function subscribe(pubsub, topic, resolveAfter) {
-	const messageData = [];
+	const messages = [];
 	const rawMessages = [];
 	let subscription;
 	let onMessage;
@@ -35,9 +35,9 @@ function subscribe(pubsub, topic, resolveAfter) {
 			rawMessages.push(message);
 			let data = Buffer.from(message.data, 'base64').toString();
 			data = JSON.parse(data);
-			messageData.push(data);
+			messages.push(data);
 
-			if (rawMessages.length >= resolveAfter) resolve(messageData);
+			if (rawMessages.length >= resolveAfter) resolve(messages);
 		}
 		onMessage = saveMessage;
 	});
@@ -49,7 +49,7 @@ function subscribe(pubsub, topic, resolveAfter) {
 			subscription.on('message', onMessage);
 
 			return {
-				messageData,
+				messages,
 				promise,
 				rawMessages,
 				subscription
