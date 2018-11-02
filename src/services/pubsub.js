@@ -1,7 +1,7 @@
 const PubSub = require('@google-cloud/pubsub');
 const CacheableService = require('./cacheableService');
 
-// Datastore config keys used to build unique cache key
+// Pubsub config keys used to build unique cache key
 const configUniqueKeys = ['projectId', 'email', 'apiEndpoint', 'keyFilename'];
 
 class PubsubWrapper extends CacheableService {

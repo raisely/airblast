@@ -16,10 +16,11 @@ class CacheableService {
 
 	getService() {
 		if (!this.service) {
-			const cacheKey = this.configUniqueKeys.reduce((key, cacheStr) => `${cacheStr},${this.config[key]}`, this.serviceName);
+			const cacheKey = [this.serviceName].concat(this.configUniqueKeys
+				.map(key => this.config[key])).join(',');
 
 			if (!serviceCache[cacheKey]) {
-				serviceCache[cacheKey] = new this.ServiceClass(this.config);
+				serviceCache[cacheKey] = new this.Service(this.config);
 			}
 
 			this.service = serviceCache[cacheKey];
