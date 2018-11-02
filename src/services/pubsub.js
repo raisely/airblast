@@ -39,13 +39,14 @@ class PubsubWrapper extends CacheableService {
 		return message;
 	}
 
-	static async decodeMessage(input) {
+	static decodeMessage(input) {
 		// check we have the data
 		const message = input.data;
-		if (!message.data) throw new Error('No message.data');
+
+		if (!message) throw new Error('No input.data');
 
 		// parse the message
-		let data = Buffer.from(message.data, 'base64').toString();
+		let data = Buffer.from(message, 'base64').toString();
 		data = JSON.parse(data);
 
 		return data;
