@@ -3,9 +3,13 @@ const Pubsub = require('@google-cloud/pubsub');
 const uuidv1 = require('uuid/v1');
 
 const serializeError = require('serialize-error');
-const { expect } = require('chai');
+const containSubset = require('chai-subset');
+const chai = require('chai');
 const sinon = require('sinon');
 const _ = require('lodash');
+
+chai.use(containSubset);
+const { expect } = chai;
 
 const TOKEN = 'SECRET TOKEN!';
 
@@ -16,8 +20,16 @@ const MockResponse = require('../utils/mockResponse');
 const { subscribe } = require('./pubsubHelper');
 
 class EmptyController extends AirblastController {}
-EmptyController.authorization = TOKEN;
+EmptyController.options = {
+	authorization: TOKEN,
+	// eslint-disable-next-line no-console
+	log: console.log,
+};
 class WithHooksController extends AirblastController {}
+WithHooksController.options = {
+	// eslint-disable-next-line no-console
+	log: console.log,
+};
 
 const hookNames = ['validate', 'beforeSave', 'afterSave', 'beforeProcess', 'process', 'afterProcess'];
 
@@ -42,9 +54,8 @@ describe('AirblastController', () => {
 				message: 'Hi there',
 			};
 			let res;
-			const recordContainer = {};
+			const container = {};
 			let subscription;
-			const messages = [];
 
 			before(async () => {
 				await pubsub.createTopic('Empty');
@@ -57,25 +68,30 @@ describe('AirblastController', () => {
 
 				res = await runRequest(controller.http, req);
 
-				messages.concat(await subscriptionDetails.promise);
+				const messages = await subscriptionDetails.promise;
+				Object.assign(container, { datastore, messages });
 			});
 			after(() => subscription.delete());
 
 			it('returns 200', () => {
-				expect(res.status).to.eq(200);
+				expect(res.statusCode).to.eq(200);
 			});
 
-			itSavesAndPublishes(datastore, eventData, messages, recordContainer);
+			itSavesAndPublishes(eventData, container);
 
 			it('initialises record metadata', () => {
-				const record = recordContainer;
-				expect(record).to.deep.eql({
-					createdAt: eventData.createdAt,
+				const { record } = container;
+				expect(record).to.containSubset({
+					createdAt: new Date(eventData.createdAt),
 					processedAt: null,
 					failedAt: null,
 					retries: 0,
 				});
 				expect(record.nextAttempt).to.not.eq(null);
+			});
+			it('saves data', () => {
+				const { record } = container;
+				expect(JSON.parse(record.data)).to.deep.eq(eventData);
 			});
 		});
 
@@ -90,8 +106,8 @@ describe('AirblastController', () => {
 				const req = createPostReq(eventData);
 				const controller = new WithHooksController();
 
-				hooks.concat(['validate', 'beforeSave', 'afterSave']
-					.map(hook => sinon.spy(controller, hook)));
+				hooks.push(...(['validate', 'beforeSave', 'afterSave']
+					.map(hook => sinon.spy(controller, hook))));
 
 				await runRequest(controller.http, req);
 			});
@@ -104,12 +120,12 @@ describe('AirblastController', () => {
 
 	describe('enqueue', () => {
 		let subscription;
-		const messages = [];
 		const payload = {
 			all: 'The people in the world',
 			stand: true,
 			as: 1,
 		};
+		const container = {};
 
 		before(async () => {
 			const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
@@ -118,11 +134,12 @@ describe('AirblastController', () => {
 
 			await controller.enqueue(payload);
 
-			messages.concat(await subscriptionDetails.promise);
+			const messages = await subscriptionDetails.promise;
+			Object.assign(container, { messages, datastore });
 		});
 		after(() => subscription.delete());
 
-		itSavesAndPublishes(datastore, payload, messages);
+		itSavesAndPublishes(payload, container);
 	});
 
 	describe('pubsubMessage', () => {
@@ -156,8 +173,8 @@ describe('AirblastController', () => {
 			before(async () => {
 				const controller = new WithHooksController();
 
-				hooks.concat(['validate', 'beforeSave', 'afterSave']
-					.map(hook => sinon.spy(controller, hook)));
+				hooks.push(...(['validate', 'beforeSave', 'afterSave']
+					.map(hook => sinon.spy(controller, hook))));
 
 				container.recordKey = await setupRecord(datastore, 'WithHooks', eventData);
 				await sendPubsubPayload(controller, container.recordKey, 'Empty');
@@ -414,14 +431,13 @@ function itCallsHook(spies, name, expectedOpts) {
 	});
 }
 
-function itSavesAndPublishes(datastore, eventData, messages, recordContainer = {}) {
-	let recordKey;
-
-	itPublishes(Object.assign({ messages }, recordContainer));
-	it('saves payload to datastore', () => {
+function itSavesAndPublishes(eventData, recordContainer) {
+	itPublishes(recordContainer);
+	it('saves payload to datastore', async () => {
+		const { recordKey, datastore } = recordContainer;
 		if (!recordKey) throw new Error('recordKey is null. (maybe past step failed)');
 
-		const results = datastore.get(recordKey);
+		const results = await datastore.get(recordKey);
 		const [record] = results;
 		const data = JSON.parse(record.data);
 		expect(data).to.deep.equal(eventData);
@@ -433,7 +449,7 @@ function itSavesAndPublishes(datastore, eventData, messages, recordContainer = {
 function itPublishes(container) {
 	it('queues payload in pubsub', () => {
 		expect(container.messages).to.have.length(1);
-		expect(container.messages[0]).to.have.keys(['key']);
+		expect(container.messages[0]).to.have.keys(['key', 'name']);
 		if (container.recordKey) {
 			expect(container.messages[0].key).to.deep.eq(container.recordKey);
 		} else {
