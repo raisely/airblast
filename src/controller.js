@@ -20,9 +20,13 @@ const { AppError } = require('./helpers/errors');
 // Retries at half an hour through to 1 week
 const DEFAULT_RETRY = [0.5, 1, 2, 12, 24, 48, 96, 168];
 
+const DEFAULT_OPTIONS = {
+	autoCreateTopic: true,
+};
+
 class AirblastController {
 	constructor(opts) {
-		const options = Object.assign({}, opts, this.constructor.options);
+		const options = Object.assign({}, DEFAULT_OPTIONS, opts, this.constructor.options);
 		this.options = options;
 
 		this.name = options.name;
@@ -38,7 +42,7 @@ class AirblastController {
 		this.log = options.log || _.noop;
 
 		this.datastore = new Datastore(options.datastore || {});
-		this.pubsub = new Pubsub(options.pubsub || {});
+		this.pubsub = new Pubsub(options.pubsub || {}, options.autoCreateTopic);
 
 		if (options.authenticate) {
 			this.authenticate = _.isString(options.authenticate) ?
@@ -193,17 +197,17 @@ class AirblastController {
 		}
 	}
 
-	async hook(name, args) {
-		if (this[name]) return this[name](args);
+	async hook(name, opts) {
+		if (this[name]) return this[name](opts);
 		return null;
 	}
 
 	async http(req, res) {
-		this.httpHandler(req, res);
+		return this.httpHandler(req, res);
 	}
 
 	async httpRetry(req, res) {
-		this.httpHandler(req, res, 'retry');
+		return this.httpHandler(req, res, 'retry');
 	}
 
 	async httpHandler(req, res, name) {
