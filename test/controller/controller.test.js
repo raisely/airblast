@@ -172,10 +172,10 @@ describe('AirblastController', () => {
 				const controller = new WithHooksController();
 
 				['beforeProcess', 'process', 'afterProcess']
-					.forEach((hook) => { sinon.spy(controller, hook); });
+					.forEach((hook) => { hooks[hook] = sinon.spy(controller, hook); });
 
 				container.recordKey = await setupRecord(datastore, 'WithHooks', eventData);
-				await sendPubsubPayload(controller, container.recordKey, 'Empty');
+				await sendPubsubPayload(controller, container.recordKey, 'WithHooks');
 				container.datastore = datastore;
 			});
 
@@ -190,7 +190,7 @@ describe('AirblastController', () => {
 			let controller;
 
 			before(() => {
-				controller = new WithHooksController();
+				controller = new WithHooksController({ log: false });
 			});
 
 			describe('first failure', () => {
@@ -203,15 +203,15 @@ describe('AirblastController', () => {
 				before(async () => {
 					controller.process = () => { throw firstError; };
 					recordKey = await setupRecord(datastore, 'WithHooks', eventData);
-					await sendPubsubPayload(controller, recordKey, 'Empty');
+					await sendPubsubPayload(controller, recordKey, 'WithHooks');
 				});
 
 				it('should set lastError', async () => {
 					[record] = await datastore.get(recordKey);
-					expect(record.lastError).to.deep.eq(serializeError(firstError));
+					expect(record.lastError).to.eq(JSON.stringify(serializeError(firstError)));
 				});
 				it('should set firstError', () => {
-					expect(record.firstError).to.deep.eq(serializeError(firstError));
+					expect(record.firstError).to.eq(JSON.stringify(serializeError(firstError)));
 				});
 			});
 			describe('second failure', () => {
@@ -223,17 +223,18 @@ describe('AirblastController', () => {
 				before(async () => {
 					controller.process = () => { throw secondError; };
 					recordKey = await setupRecord(datastore, 'WithHooks', eventData, {
-						firstError, lastError: firstError,
+						firstError: JSON.stringify(serializeError(firstError)),
+						lastError: JSON.stringify(serializeError(firstError)),
 					});
-					await sendPubsubPayload(controller, recordKey, 'Empty');
+					await sendPubsubPayload(controller, recordKey, 'WithHooks');
 				});
 
 				it('should set lastError', async () => {
 					[record] = await datastore.get(recordKey);
-					expect(record.lastError).to.deep.eq(serializeError(secondError));
+					expect(record.lastError).to.eq(JSON.stringify(serializeError(secondError)));
 				});
 				it('should leave firstError unchanged', () => {
-					expect(record.firstError).to.deep.eq(serializeError(firstError));
+					expect(record.firstError).to.eq(JSON.stringify(serializeError(firstError)));
 				});
 			});
 		});
@@ -423,7 +424,7 @@ function itCallsHook(spies, name, expectedOpts) {
 				// eslint-disable-next-line no-unused-expressions
 				expect(opts[key]).to.not.be.null;
 			} else {
-				expect(opts[key]).to.deep.eql(expectedOpts[key]);
+				expect(opts[key]).to.containSubset(expectedOpts[key]);
 			}
 		});
 	});
@@ -476,10 +477,10 @@ async function setupRecord(datastore, name, payload, defaults) {
 	}, defaults);
 
 	const recordKey = datastore.key([name]);
-	datastore.save({
+	await datastore.save({
 		key: recordKey,
 		data: record,
-		excludeFromIndexes: ['data'],
+		excludeFromIndexes: ['data', 'firstError', 'lastError'],
 	});
 
 	return recordKey;

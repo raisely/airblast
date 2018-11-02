@@ -26,7 +26,8 @@ const DEFAULT_OPTIONS = {
 
 class AirblastController {
 	constructor(opts) {
-		const options = Object.assign({}, DEFAULT_OPTIONS, opts, this.constructor.options);
+		const options = Object.assign({}, DEFAULT_OPTIONS, this.constructor.options, opts);
+
 		this.options = options;
 
 		this.name = options.name;
@@ -90,13 +91,13 @@ class AirblastController {
 	}
 
 	async pubsubMessage(input) {
-		const pubsubMessage = this.pubsub.constructor.decode(input);
+		const pubsubMessage = this.pubsub.constructor.decodeMessage(input);
 
-		if (input.name !== this.name) {
-			throw new Error(`Received pubsub message not meant for this controller (message name: ${input.name}, controller name: ${this.name})`);
+		if (pubsubMessage.name !== this.name) {
+			throw new Error(`Received pubsub message not meant for this controller (message name: ${pubsubMessage.name}, controller name: ${this.name})`);
 		}
 
-		const record = this.datastore.get(pubsubMessage.key);
+		const record = await this.datastore.get(pubsubMessage.key);
 
 		// Avoid repeat processing
 		if (record.processedAt) return;
