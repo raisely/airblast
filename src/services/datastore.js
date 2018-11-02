@@ -21,8 +21,8 @@ class DatastoreWrapper extends CacheableService {
 
 		const [record] = result;
 
-		if (!record || !record.data) {
-			console.log(`(${key}) data undefined`, result, key);
+		if (!record) {
+			throw new Error(`No record found for key ${key}`);
 		}
 
 		record.data = JSON.parse(record.data);
@@ -61,7 +61,7 @@ class DatastoreWrapper extends CacheableService {
 			retries: 3,
 		});
 
-		return key;
+		return { key, record };
 	}
 
 	createQuery(key) {
