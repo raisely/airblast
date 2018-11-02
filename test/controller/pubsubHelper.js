@@ -52,11 +52,11 @@ function subscribe(pubsub, topic, resolveAfter) {
 				messages,
 				promise,
 				rawMessages,
-				subscription
+				subscription,
 			};
 		});
 }
 
 module.exports = {
-	subscribe
+	subscribe,
 };

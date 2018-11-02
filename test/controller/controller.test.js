@@ -7,18 +7,21 @@ const { expect } = require('chai');
 const sinon = require('sinon');
 const _ = require('lodash');
 
+const TOKEN = 'SECRET TOKEN!';
+
 require('./specHelper');
 
-const AirblastController = require('../../index');
+const { AirblastController } = require('../../index');
 const MockResponse = require('../utils/mockResponse');
 const { subscribe } = require('./pubsubHelper');
 
 class EmptyController extends AirblastController {}
-class HookedController extends AirblastController {}
+EmptyController.authorization = TOKEN;
+class WithHooksController extends AirblastController {}
 
 const hookNames = ['validate', 'beforeSave', 'afterSave', 'beforeProcess', 'process', 'afterProcess'];
 
-hookNames.forEach((hook) => { HookedController.prototype[hook] = _.noop; });
+hookNames.forEach((hook) => { WithHooksController.prototype[hook] = _.noop; });
 
 const notNull = Symbol('not null');
 
@@ -34,7 +37,7 @@ describe('AirblastController', () => {
 	describe('post', () => {
 		describe('without hooks', () => {
 			const eventData = {
-				createdAt: new Date().toIsoString(),
+				createdAt: new Date().toISOString(),
 				name: 'Amelia Telford',
 				message: 'Hi there',
 			};
@@ -44,6 +47,8 @@ describe('AirblastController', () => {
 			const messages = [];
 
 			before(async () => {
+				await pubsub.createTopic('Empty');
+
 				const req = createPostReq(eventData);
 				const controller = new EmptyController();
 
@@ -83,7 +88,7 @@ describe('AirblastController', () => {
 
 			before(async () => {
 				const req = createPostReq(eventData);
-				const controller = new HookedController();
+				const controller = new WithHooksController();
 
 				hooks.concat(['validate', 'beforeSave', 'afterSave']
 					.map(hook => sinon.spy(controller, hook)));
@@ -149,12 +154,12 @@ describe('AirblastController', () => {
 			const payload = { record: { data: eventData }, data: eventData };
 
 			before(async () => {
-				const controller = new HookedController();
+				const controller = new WithHooksController();
 
 				hooks.concat(['validate', 'beforeSave', 'afterSave']
 					.map(hook => sinon.spy(controller, hook)));
 
-				container.recordKey = await setupRecord(datastore, 'Hooked', eventData);
+				container.recordKey = await setupRecord(datastore, 'WithHooks', eventData);
 				await sendPubsubPayload(controller, container.recordKey, 'Empty');
 				container.datastore = datastore;
 			});
@@ -170,7 +175,7 @@ describe('AirblastController', () => {
 			let controller;
 
 			before(() => {
-				controller = new HookedController();
+				controller = new WithHooksController();
 			});
 
 			describe('first failure', () => {
@@ -181,8 +186,8 @@ describe('AirblastController', () => {
 				};
 
 				before(async () => {
-					controller.process = () => throw firstError;
-					recordKey = await setupRecord(datastore, 'Hooked', eventData);
+					controller.process = () => { throw firstError; };
+					recordKey = await setupRecord(datastore, 'WithHooks', eventData);
 					await sendPubsubPayload(controller, recordKey, 'Empty');
 				});
 
@@ -201,8 +206,8 @@ describe('AirblastController', () => {
 				const eventData = { message: 'Doooooooooomed!' };
 
 				before(async () => {
-					controller.process = () => throw secondError;
-					recordKey = await setupRecord(datastore, 'Hooked', eventData, {
+					controller.process = () => { throw secondError; };
+					recordKey = await setupRecord(datastore, 'WithHooks', eventData, {
 						firstError, lastError: firstError,
 					});
 					await sendPubsubPayload(controller, recordKey, 'Empty');
@@ -330,8 +335,11 @@ describe('AirblastController', () => {
 		});
 
 		describe('WHEN record has exceeded retries', () => {
+			const container = {};
 			before(async () => {
-				container.recordKey = await setupRecord(datastore, 'Empty', eventData, );
+				container.recordKey = await setupRecord(datastore, 'Empty', eventData, {
+					retries: 8,
+				});
 
 				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
 				({ subscription, messages } = subscriptionDetails);
@@ -342,7 +350,7 @@ describe('AirblastController', () => {
 			after(() => subscription.delete());
 
 			itDoesNotPublish(container);
-			it('should mark the record failed', () => {
+			it('should mark the record failed', async () => {
 				const [record] = await container.datastore.get(container.recordKey);
 				expect(record.failedAt).to.not.eq(null);
 			});
@@ -365,7 +373,7 @@ function createPostReq(data) {
 	return {
 		method: 'POST',
 		headers: {
-			authorization: `Bearer ${config.token}`,
+			authorization: `Bearer ${TOKEN}`,
 		},
 		body: {
 			data,
