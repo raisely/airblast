@@ -34,7 +34,7 @@ class DatastoreWrapper extends CacheableService {
 		return promiseRetry(retry => this.getDatastore().update({
 			key,
 			data: document,
-			excludeFromIndexes: ['data'],
+			excludeFromIndexes: ['data', 'firstError', 'lastError'],
 		}).catch(retry), {
 			retries: 3,
 		});
@@ -56,7 +56,7 @@ class DatastoreWrapper extends CacheableService {
 		await promiseRetry(retry => this.getDatastore().save({
 			key,
 			data: record,
-			excludeFromIndexes: ['data'],
+			excludeFromIndexes: ['data', 'firstError', 'lastError'],
 		}).catch(retry), {
 			retries: 3,
 		});
