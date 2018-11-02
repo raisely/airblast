@@ -22,11 +22,11 @@ class PubsubWrapper extends CacheableService {
 	async publish(topic, key, name) {
 		const topicObj = await this.getPubsub().topic(topic);
 
-		const exists = await topicObj.exists();
+		const [exists] = await topicObj.exists();
 
 		if (!exists) {
 			if (this.autoCreateTopic) {
-				await this.getPubsub().createTopic(topic);
+				await this.createTopic(topic);
 			} else {
 				throw new Error(`Topic ${topic} does not exist and auto create is disabled.`);
 			}
