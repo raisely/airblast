@@ -163,7 +163,11 @@ class AirblastController {
 
 		// If the nextAttempt is now (or has passed), queue it
 		if ((record.lastAttempt == null) || (record.nextAttempt <= new Date())) {
-			await this.pubsub.publish(this.topic, { key: record[this.datastore.getDatastore().KEY] });
+			await this.pubsub.publish(
+				this.topic,
+				{ key: record[this.datastore.getDatastore().KEY] },
+				this.name,
+			);
 		}
 	}
 
