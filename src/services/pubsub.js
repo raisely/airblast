@@ -5,22 +5,36 @@ const CacheableService = require('./cacheableService');
 const configUniqueKeys = ['projectId', 'email', 'apiEndpoint', 'keyFilename'];
 
 class PubsubWrapper extends CacheableService {
-	constructor(config) {
+	constructor(config, autoCreateTopic) {
 		super(config, {
 			configUniqueKeys,
 			serviceName: 'Pubsub',
 			Service: PubSub,
 		});
+
+		this.autoCreateTopic = autoCreateTopic;
 	}
 
-	async publish(name, key) {
-		const topic = await this.getPubsub().topic(name);
+	async createTopic(topic) {
+		return this.getPubsub().createTopic(topic);
+	}
 
-		console.log('publishing event', (await topic.exists()));
+	async publish(topic, key, name) {
+		const topicObj = await this.getPubsub().topic(topic);
+
+		const exists = await topicObj.exists();
+
+		if (!exists) {
+			if (this.autoCreateTopic) {
+				await this.getPubsub().createTopic(topic);
+			} else {
+				throw new Error(`Topic ${topic} does not exist and auto create is disabled.`);
+			}
+		}
 
 		// route the event to the receiver queues
-		const message = await topic.publisher()
-			.publish(Buffer.from(JSON.stringify({ key })));
+		const message = await topicObj.publisher()
+			.publish(Buffer.from(JSON.stringify({ name, key })));
 
 		return message;
 	}

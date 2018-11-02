@@ -19,32 +19,48 @@ const Pubsub = require('./services/pubsub');
 const DEFAULT_RETRY = [0.5, 1, 2, 12, 24, 48, 96, 168];
 
 class AirblastController {
-	constructor(name, opts) {
-		this.name = name;
-		this.topic = opts.topic || name;
-		this.kind = opts.kind || name;
+	constructor(opts) {
+		this.name = opts.name;
+		if (!opts.name) {
+			let { name } = this.constructor;
+			if (name.endsWith('Controller')) name = name.slice(0, -10);
+			this.name = name;
+		}
+		this.topic = opts.topic || this.name;
+		this.kind = opts.kind || this.name;
 		this.retries = opts.retries || DEFAULT_RETRY;
 		this.maxProcessingTime = opts.masProcessingTime || 5 * 60;
 
 		this.datastore = new Datastore(opts.datastore || {});
 		this.pubsub = new Pubsub(opts.pubsub || {});
+
+		// Bind http requests to this controller instance
+		['http', 'httpRetry'].forEach((method) => {
+			this[method] = this[method].bind(this);
+		});
+	}
+
+	async enqueue(data, runAt) {
+		await this.hook('beforeSave', { data });
+
+		// Save to datastore
+		const key = this.datastore.save(this.kind, data, { runAt });
+
+		let pubsubId;
+		// If not delayed, run immediately
+		if (!runAt) pubsubId = this.pubsub.publish(this.topic, key, this.name);
+
+		// Publish
+		await this.hook('afterSave', { key, data, pubsubId });
+
+		return pubsubId;
 	}
 
 	async post(req) {
 		const { data } = req.body;
 
-		this.validate(data);
-		this.beforeSave({ data });
-
-		// Save to datastore
-		const key = this.datastore.save(this.kind, data, req.body);
-
-		let pubsubId;
-		// If not delayed, run immediately
-		if (!req.body.runAt) pubsubId = this.pubsub.publish(this.topic, key);
-
-		// Publish
-		this.afterSave({ key, data, pubsubId });
+		await this.hook('validate', { data });
+		this.enqueue(data, req.body.runAt);
 
 		// return success
 		return {
@@ -55,8 +71,12 @@ class AirblastController {
 		};
 	}
 
-	async run(input) {
-		const pubsubMessage = this.pubsub.decode(input);
+	async pubsubMessage(input) {
+		const pubsubMessage = this.pubsub.constructor.decode(input);
+
+		if (input.name !== this.name) {
+			throw new Error(`Received pubsub message not meant for this controller (message name: ${input.name}, controller name: ${this.name})`);
+		}
 
 		const record = this.datastore.load(pubsubMessage.key);
 
@@ -64,14 +84,13 @@ class AirblastController {
 		if (record.processedAt) return;
 
 		try {
-			this.beforeProcess({ record, data: record.data });
+			await this.hook('beforeProcess', { record, data: record.data });
 
 			await this.datastore.update(pubsubMessage.key, {
 				lastAttempt: new Date(),
 			});
 
-			this.process({ record, data: record.data });
-			this.afterProcess({ record, data: record.data });
+			await this.hook('process', { record, data: record.data });
 
 			// update processedAt
 			record.processedAt = new Date();
@@ -86,6 +105,8 @@ class AirblastController {
 		}
 
 		await this.datastore.update(pubsubMessage.key, record);
+
+		await this.hook('afterProcess', { record, data: record.data });
 	}
 
 	async retry() {
@@ -143,6 +164,43 @@ class AirblastController {
 		// If the nextAttempt is now (or has passed), queue it
 		if ((record.lastAttempt == null) || (record.nextAttempt <= new Date())) {
 			await this.pubsub.publish(this.topic, { key: record[this.datastore.getDatastore().KEY] });
+		}
+	}
+
+	async hook(name, args) {
+		if (this[name]) return this[name](args);
+		return null;
+	}
+
+	async http(req, res) {
+		this.httpHandler(req, res);
+	}
+
+	async httpRetry(req, res) {
+		this.httpHandler(req, res, 'retry');
+	}
+
+	async httpHandler(req, res, name) {
+		try {
+			res.set('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT');
+			res.set('Access-Control-Allow-Headers', 'Access-Control-Allow-Headers, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers');
+
+			const auth = req.headers.authorization || req.headers.Authorization;
+
+			if (doAuth && (!auth || auth !== `Bearer ${config.token}`)) {
+				throw new AppError(401, 'unauthorized', 'The token provided is not valid.');
+			}
+
+			const handler = name || req.method.toLowerCase();
+
+			if (!this[handler]) throw new AppError(404, 'not found', 'Resource cannot be found');
+
+			const result = await this[handler](req);
+
+			res.status(result.status).send(result.body);
+		} catch (error) {
+			console.error(error.stack);
+			res.status(error.status || 500).send(error.body);
 		}
 	}
 }
