@@ -95,8 +95,8 @@ describe('AirblastController', () => {
 			});
 		});
 
-		describe('with hooks', () => {
-			const hooks = [];
+		describe.only('with hooks', () => {
+			const hooks = {};
 			const eventData = {
 				format: 'text',
 				text: "I'm a lumberjack and I'm ok",
@@ -106,8 +106,8 @@ describe('AirblastController', () => {
 				const req = createPostReq(eventData);
 				const controller = new WithHooksController();
 
-				hooks.push(...(['validate', 'beforeSave', 'afterSave']
-					.map(hook => sinon.spy(controller, hook))));
+				['validate', 'beforeSave', 'afterSave']
+					.forEach((hook) => { hooks[hook] = sinon.spy(controller, hook); });
 
 				await runRequest(controller.http, req);
 			});
@@ -167,14 +167,14 @@ describe('AirblastController', () => {
 			};
 
 			const container = {};
-			const hooks = [];
+			const hooks = {};
 			const payload = { record: { data: eventData }, data: eventData };
 
 			before(async () => {
 				const controller = new WithHooksController();
 
-				hooks.push(...(['validate', 'beforeSave', 'afterSave']
-					.map(hook => sinon.spy(controller, hook))));
+				['beforeProcess', 'process', 'afterProcess']
+					.forEach((hook) => { sinon.spy(controller, hook); });
 
 				container.recordKey = await setupRecord(datastore, 'WithHooks', eventData);
 				await sendPubsubPayload(controller, container.recordKey, 'Empty');
@@ -416,8 +416,8 @@ function itDoesNotChangeTheRecord(container) {
 
 function itCallsHook(spies, name, expectedOpts) {
 	it(`calls ${name}`, () => {
-		expect(spies[name]).to.have.been.called();
-		const opts = spies[name].getCall(0).args;
+		expect(spies[name].called).to.eq(true);
+		const opts = spies[name].getCall(0).args[0];
 		expect(opts).to.have.keys(Object.keys(expectedOpts));
 
 		Object.keys(expectedOpts).forEach((key) => {
