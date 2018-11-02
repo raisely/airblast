@@ -35,7 +35,7 @@ class AirblastController {
 		this.kind = options.kind || this.name;
 		this.retries = options.retries || DEFAULT_RETRY;
 		this.maxProcessingTime = options.masProcessingTime || 5 * 60;
-		this.log = options.log;
+		this.log = options.log || _.noop;
 
 		this.datastore = new Datastore(options.datastore || {});
 		this.pubsub = new Pubsub(options.pubsub || {});
@@ -56,11 +56,11 @@ class AirblastController {
 		await this.hook('beforeSave', { data });
 
 		// Save to datastore
-		const { key, record } = this.datastore.save(this.kind, data, { runAt });
+		const { key, record } = await this.datastore.save(this.kind, data, { runAt });
 
 		let pubsubId;
 		// If not delayed, run immediately
-		if (!runAt) pubsubId = this.pubsub.publish(this.topic, key, this.name);
+		if (!runAt) pubsubId = await this.pubsub.publish(this.topic, key, this.name);
 
 		this.log(`(${this.name} ${record.uuid}) Record saved and queued`);
 
@@ -74,7 +74,7 @@ class AirblastController {
 		const { data } = req.body;
 
 		await this.hook('validate', { data });
-		this.enqueue(data, req.body.runAt);
+		await this.enqueue(data, req.body.runAt);
 
 		// return success
 		return {
