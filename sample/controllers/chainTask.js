@@ -1,9 +1,10 @@
 const { AirblastController } = require('airblast');
 
-const options = {
-	topic: 'customTopic',
-};
-
+/**
+  * This controller will
+  * 1. receive data from http post requests (no validation)
+  * 2. enqueue that data for processing by the MyTask controller
+  */
 class MyTask extends AirblastController {
 	async process({ data }) {
 		// Put data on myTask's job queue

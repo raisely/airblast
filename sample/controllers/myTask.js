@@ -6,11 +6,17 @@ const options = {
 	log: console.log,
 };
 
+/**
+  * This controller will
+  * 1. Receive data over http post, and validate that it contains an `id` attribute
+  * (The http post will fail with status 400 if data.id is missing)
+  * 2. Log the data contents to the console during background processing
+  */
 class MyTask extends AirblastController {
 	// eslint-disable-next-line class-methods-use-this
 	async validate({ data }) {
 		if (!data.id) {
-			throw new Error('The data should have an id!');
+			throw new this.AppError(400, 'invalid', 'The data should have an id!');
 		}
 	}
 

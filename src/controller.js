@@ -342,4 +342,6 @@ class AirblastController {
 	}
 }
 
+Object.assign(AirblastController, { AppError });
+
 module.exports = AirblastController;
