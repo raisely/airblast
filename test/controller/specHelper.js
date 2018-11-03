@@ -1,7 +1,7 @@
 const DatastoreEmulator = require('google-datastore-emulator');
 const PubSubEmulator = require('google-pubsub-emulator');
 
-const queues = ['Empty'];
+const queues = ['Empty', 'WithHooks'];
 
 const emulators = [];
 
