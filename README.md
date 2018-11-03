@@ -14,11 +14,14 @@ Example of job chains
 
 ```
 class JobController extends AirblastController {
+  // Will return 400 if someone tries to post an invalid payload
   validate(data) {
     if (!data.about) {
       throw new this.AppError(400, 'validation', 'Data must contain about attribute');
     }
   }
+  
+  // Send the job to the email and airtable controller for processing
   process(data) {
     this.controllers.email.enqueue(data);
     this.controllers.airtable.enqueue(data);
