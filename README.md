@@ -12,7 +12,7 @@ See the [samples](/samples) for examples of setting up simple controllers
 
 Example of job chains
 
-```
+```javascript
 class JobController extends AirblastController {
   // Will return 400 if someone tries to post an invalid payload
   validate({ data }) {
@@ -55,3 +55,21 @@ That's it, once you've written your process function,
 you've written cloud functions that are ready to deploy!
 See the [sample](/sample) directory for scripts
 to deploy them.
+
+
+## Setting up for deployment
+
+1. Install gcloud command line
+
+```sh
+gcloud auth login
+gcloud config set project <your project id>
+# List available zones to deploy functions
+gcloud functions regions list
+gcloud config set functions/region <preferred region>
+# If you are also deploying the retry cron server, you will
+# probably want to set the default app engine zone to the same
+gcloud compute project-info add-metadata --metadata google-compute-default-region=<preferred region>
+# Re-run gcloud init to make use of your new defaults
+gcloud init
+```
