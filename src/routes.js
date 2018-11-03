@@ -6,14 +6,25 @@
 function exportRoutes(controllers) {
 	// const defaults = { http: true, retry: true, pubsub: true };
 
-	const routes = {};
+	const routes = [];
 
 	Object.keys(controllers).forEach((name) => {
 		const controller = controllers[name];
 
-		routes[name] = controller.http;
-		routes[`${name}Retry`] = controller.httpRetry;
-		routes[`${name}Process`] = controller.pubsubMessage;
+		routes.push({
+			type: 'http',
+			fn: controller.http,
+			path: name,
+		}, {
+			type: 'http',
+			fn: controller.httpRetry,
+			path: `${name}Retry`,
+		}, {
+			type: 'pubsub',
+			fn: controller.pubsubMessage,
+			path: `${name}Process`,
+			topic: controller.topic,
+		});
 	});
 
 	return routes;
