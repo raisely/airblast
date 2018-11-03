@@ -26,14 +26,15 @@ const DEFAULT_OPTIONS = {};
   * @method afterSave({ key, data, pubsubId }) Called during post or enqueue after object is saved
   *
   * Processing Hooks
-  * @method beforeProcess({ record*, data }) Called prior to processing a data
-  * @method process({ record*, data }) Called to perform processing on the data
-  * @method afterProcess({ record, data }) Called after a record has been processed and marked
+  * @method beforeProcess({ record*, data, key* }) Called prior to processing a data
+  * @method process({ record*, data, key* }) Called to perform processing on the data
+  * @method afterProcess({ record, data, key* }) Called after a record has been processed and marked
   * processed
   *
   * Changes to arguments marked with * will be saved to datastore
   * NOTE if you change record during a call to the process hook, that change will be pesisted
   * **even if** an error is thrown by the processor
+  * WARNING if you change the value of key, you will end up with duplicate records
   *
   * Hook parameters
   * @param {object} data the data received by post / enqueue for processing
@@ -146,6 +147,13 @@ class AirblastController {
 	}
 
 	/**
+	  * Shortcut to load a record from the datastore with the given key
+	  */
+	async load(key) {
+		return this.datastore.get(key);
+	}
+
+	/**
 	  * Receives a job from pubsub for processing
 	  * Causes beforeProcess, process and afterProcess hooks to be called
 	  * @param {StringBuffer} input message from pubsub
@@ -157,20 +165,21 @@ class AirblastController {
 			throw new Error(`Received pubsub message not meant for this controller (message name: ${pubsubMessage.name}, controller name: ${this.name})`);
 		}
 
-		const record = await this.datastore.get(pubsubMessage.key);
+		const { key } = pubsubMessage;
+		const record = await this.load(key);
 
 		// Avoid repeat processing
 		if (record.processedAt) return;
 
 		try {
-			await this.hook('beforeProcess', { record, data: record.data });
+			await this.hook('beforeProcess', { record, data: record.data, key });
 
 			await this.datastore.update(pubsubMessage.key, {
 				lastAttempt: new Date(),
 			});
 
 			this.log(`(${this.name} ${record.uuid}) Record processing ...`);
-			await this.hook('process', { record, data: record.data });
+			await this.hook('process', { record, data: record.data, key });
 
 			// update processedAt
 			record.processedAt = new Date();
@@ -189,7 +198,7 @@ class AirblastController {
 		await this.datastore.update(pubsubMessage.key, record);
 		this.log(`(${this.name} ${record.uuid}) Record processed`);
 
-		await this.hook('afterProcess', { record, data: record.data });
+		await this.hook('afterProcess', { record, data: record.data, key });
 	}
 
 	/**

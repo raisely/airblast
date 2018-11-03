@@ -175,6 +175,7 @@ describe('AirblastController', () => {
 					.forEach((hook) => { hooks[hook] = sinon.spy(controller, hook); });
 
 				container.recordKey = await setupRecord(datastore, 'WithHooks', eventData);
+				payload.key = container.recordKey;
 				await sendPubsubPayload(controller, container.recordKey, 'WithHooks');
 				container.datastore = datastore;
 			});

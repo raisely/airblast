@@ -15,21 +15,26 @@ Example of job chains
 ```
 class JobController extends AirblastController {
   // Will return 400 if someone tries to post an invalid payload
-  validate(data) {
+  validate({ data }) {
     if (!data.about) {
       throw new this.AppError(400, 'validation', 'Data must contain about attribute');
     }
   }
-  
+
   // Send the job to the email and airtable controller for processing
-  process(data) {
-    this.controllers.email.enqueue(data);
-    this.controllers.airtable.enqueue(data);
+  async process({ key }) {
+    return Promise.all([
+      // Pass the key of this record to the other controllers
+      this.controllers.email.enqueue({ key }),
+      this.controllers.airtable.enqueue({ key }),      
+    ])
   }
 }
 
 class EmailController extends AirblastController {
-  process(data) {
+  async process({ data }) {
+    // Load the record that was passed in
+    const payload = await this.load(data.key);
     sendEmail({
       to: 'admin@myco.example',
       subject: 'Job received',
@@ -39,8 +44,9 @@ class EmailController extends AirblastController {
 }
 
 class AirtableController extends AirblastController {
-  process(data) {
-    airtables.insert(data);
+  async process({ data }) {
+    const payload = await this.load(data.key);
+    airtables.insert(payload);
   }
 }
 ```
