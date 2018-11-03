@@ -408,15 +408,13 @@ function itMarksTheRecordProcessed(container) {
 	});
 }
 
-function createPostReq(data) {
+function createPostReq(body) {
 	return {
 		method: 'POST',
 		headers: {
 			authorization: `Bearer ${TOKEN}`,
 		},
-		body: {
-			data,
-		},
+		body,
 	};
 }
 

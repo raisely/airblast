@@ -56,6 +56,8 @@ class AirblastController {
 	  * @param {string} opts.name The name of the controller (Default: guessed from the class name)
 	  * @param {string} opts.topic Pubsub topic to publish jobs on (Default: opts.name)
 	  * @param {string} opts.kind The kind of entity to save records in Datastore (Default: opts.name)
+	  * @param {boolean} opts.wrapInData Expect the http payload to be inside the req.body.data
+	  * (Defeault: false)
 	  * @param {number[]} opts.retries Array of retry periods (in hours)
 	  * @param {number} opts.maxProcessingTime The maximum grace period for a job to finish
 	  *  processing before retrying (in minutes) (Default: 5)
@@ -82,6 +84,7 @@ class AirblastController {
 		this.retries = options.retries || DEFAULT_RETRY;
 		this.maxProcessingTime = options.maxProcessingTime || 5 * 60;
 		this.log = options.log || _.noop;
+		this.wrapInData = options.wrapInData;
 
 		this.datastore = new Datastore(options.datastore || {});
 		this.pubsub = new Pubsub(options.pubsub || {});
@@ -128,7 +131,7 @@ class AirblastController {
 	  * @return {object} { status, body } The status code and body to return
 	  */
 	async post(req) {
-		const { data } = req.body;
+		const data = this.wrapInData ? req.body.data : req.body;
 
 		await this.hook('validate', { data });
 		await this.enqueue(data, req.body.runAt);
