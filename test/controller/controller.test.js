@@ -263,12 +263,15 @@ describe('AirblastController', () => {
 				container.recordKey = await setupRecord(datastore, 'Empty', eventData, {
 				});
 
-				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
+				const subscriptionDetails = await subscribe(pubsub, 'Empty', 0);
 				({ subscription, messages } = subscriptionDetails);
-				container.messages = messages;
-				await runRequest(controller, 'httpRetry', createPostReq({}));
+				Object.assign(container, { datastore, messages });
+				await runRequest(controller.httpRetry, createPostReq({}));
 			});
-			after(() => subscription.delete());
+			after(() => Promise.all([
+				subscription.delete(),
+				datastore.delete(container.recordKey),
+			]));
 
 			itDoesNotPublish(container);
 			itDoesNotChangeTheRecord(container);
@@ -283,12 +286,18 @@ describe('AirblastController', () => {
 				});
 
 				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
-				({ subscription, messages } = subscriptionDetails);
-				container.messages = messages;
+				let promise;
+				// eslint-disable-next-line prefer-const
+				({ subscription, messages, promise } = subscriptionDetails);
+				Object.assign(container, { datastore, messages });
 
-				await runRequest(controller, 'httpRetry', createPostReq({}));
+				await runRequest(controller.httpRetry, createPostReq({}));
+				await promise;
 			});
-			after(() => subscription.delete());
+			after(() => Promise.all([
+				subscription.delete(),
+				datastore.delete(container.recordKey),
+			]));
 
 			itPublishes(container);
 			itDoesNotChangeTheRecord(container);
@@ -299,23 +308,26 @@ describe('AirblastController', () => {
 			before(async () => {
 				container.recordKey = await setupRecord(datastore, 'Empty', eventData, {
 					createdAt: new Date(new Date() - (TEN_MINUTES * 2)),
-					lastAttempt: new Date(new Date() - (TEN_MINUTES * 2)),
+					lastAttempt: new Date(new Date() - TEN_MINUTES),
 					nextAttempt: new Date(new Date() - TEN_MINUTES - 5),
 				});
 
-				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
+				const subscriptionDetails = await subscribe(pubsub, 'Empty', 0);
 				({ subscription, messages } = subscriptionDetails);
-				container.messages = messages;
+				Object.assign(container, { datastore, messages });
 
-				await runRequest(controller, 'httpRetry', createPostReq({}));
+				await runRequest(controller.httpRetry, createPostReq({}));
 			});
-			after(() => subscription.delete());
+			after(() => Promise.all([
+				subscription.delete(),
+				datastore.delete(container.recordKey),
+			]));
 
 			it('should set nextAttempt', async () => {
 				const { recordKey } = container;
 				const [record] = await datastore.get(recordKey);
 				expect(record.nextAttempt > record.lastAttempt, 'nextAttempt > lastAttempt');
-				expect(record.processedAt, 'processedAt').to.not.eq(null);
+				expect(record.processedAt, `processedAt should be null (${record.processedAt})`).to.eq(null);
 				container.record = record;
 			});
 			it('should increment retries', () => {
@@ -336,17 +348,23 @@ describe('AirblastController', () => {
 				container.recordKey = await setupRecord(datastore, 'Empty', eventData, recordMeta);
 
 				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
-				({ subscription, messages } = subscriptionDetails);
-				container.messages = messages;
+				let promise;
+				// eslint-disable-next-line prefer-const
+				({ subscription, messages, promise } = subscriptionDetails);
+				Object.assign(container, { datastore, messages });
 
-				await runRequest(controller, 'httpRetry', createPostReq({}));
+				await runRequest(controller.httpRetry, createPostReq({}));
+				await promise;
 			});
-			after(() => subscription.delete());
+			after(() => Promise.all([
+				subscription.delete(),
+				datastore.delete(container.recordKey),
+			]));
 
 			itPublishes(container);
 			it('should not change the record', async () => {
 				const [record] = await container.datastore.get(container.recordKey);
-				expect(record).to.deep.eq(recordMeta);
+				expect(record).to.containSubset(recordMeta);
 			});
 		});
 
@@ -355,15 +373,20 @@ describe('AirblastController', () => {
 			before(async () => {
 				container.recordKey = await setupRecord(datastore, 'Empty', eventData, {
 					retries: 8,
+					lastAttempt: new Date(new Date() - TEN_MINUTES),
+					nextAttempt: new Date(new Date() - TEN_MINUTES),
 				});
 
-				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
+				const subscriptionDetails = await subscribe(pubsub, 'Empty', 0);
 				({ subscription, messages } = subscriptionDetails);
-				container.messages = messages;
+				Object.assign(container, { datastore, messages });
 
-				await runRequest(controller, 'httpRetry', createPostReq({}));
+				await runRequest(controller.httpRetry, createPostReq({}));
 			});
-			after(() => subscription.delete());
+			after(() => Promise.all([
+				subscription.delete(),
+				datastore.delete(container.recordKey),
+			]));
 
 			itDoesNotPublish(container);
 			it('should mark the record failed', async () => {
@@ -400,13 +423,16 @@ function createPostReq(data) {
 async function runRequest(fn, req) {
 	const res = new MockResponse();
 	await fn(req, res);
+	if (res.statusCode !== 200) {
+		throw new Error(res.body);
+	}
 	return res;
 }
 
 function itDoesNotChangeTheRecord(container) {
 	it('should not change the record', async () => {
 		const [record] = await container.datastore.get(container.recordKey);
-		expect(record).to.deep.eq({
+		expect(record).to.containSubset({
 			nextAttempt: null,
 			retries: 0,
 		});
@@ -450,7 +476,7 @@ function itPublishes(container) {
 		expect(container.messages).to.have.length(1);
 		expect(container.messages[0]).to.have.keys(['key', 'name']);
 		if (container.recordKey) {
-			expect(container.messages[0].key).to.deep.eq(container.recordKey);
+			expect(container.messages[0].key).to.containSubset(container.recordKey);
 		} else {
 			container.recordKey = container.messages[0].key;
 		}

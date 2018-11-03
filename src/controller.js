@@ -133,26 +133,15 @@ class AirblastController {
 	}
 
 	async retry() {
-		const completeWindow = new Date(tc.now().sub(tc.seconds(this.maxProcessingTime)).toIsoString());
-
 		// Retry failures
-		let query = this.datastore.createQuery([this.kind])
+		const query = this.datastore.createQuery([this.kind])
 			.filter('processedAt', null)
 			.filter('failedAt', null)
-			.filter('nextAttempt', '<=', new Date())
-			.filter('lastAttempt', '<=', completeWindow);
+			.filter('nextAttempt', '<=', new Date());
 
 		await this.findAndRetry(query);
 
-		// Queue first attempts with delayed starts
-		query = this.datastore.createQuery([this.kind])
-			.filter('processedAt', null)
-			.filter('failedAt', null)
-			.filter('nextAttempt', '<=', new Date())
-			.filter('lastAttempt', null)
-			.filter('createdAt', '<', completeWindow);
-
-		await this.findAndRetry(query);
+		return { status: 200, body: { status: 'ok' } };
 	}
 
 	async findAndRetry(query) {
@@ -162,6 +151,8 @@ class AirblastController {
 		records[0].forEach((record) => {
 			promises.push(this.queueRetry(record));
 		});
+
+		return Promise.all(promises);
 	}
 
 	async queueRetry(record) {
@@ -175,22 +166,25 @@ class AirblastController {
 				record.nextAttempt = new Date(newTime.toIsoString());
 				record.retries += 1;
 
-				this.log(`(${this.name} ${record.uuid}) Record scheduled for retry #${record.retries}`);
+				this.log(`(${this.name} ${record.uuid}) Record scheduled for retry #${record.retries} at ${newTime.toIsoString()}`);
 			} else {
 				record.failedAt = record.lastAttempt;
 			}
 
 			await this.datastore.update(
 				record[this.datastore.getDatastore().KEY],
-				_.pick(record, ['nextAttempt', 'retries', 'failedAt']),
+				record,
 			);
 		}
 
+		const completeWindow = new Date(tc.now().sub(tc.seconds(this.maxProcessingTime)).toIsoString());
+
 		// If the nextAttempt is now (or has passed), queue it
-		if ((record.lastAttempt == null) || (record.nextAttempt <= new Date())) {
+		if (((record.lastAttempt == null) || (record.lastAttempt <= completeWindow)) &&
+			(record.nextAttempt <= new Date()) && (record.createdAt < completeWindow)) {
 			await this.pubsub.publish(
 				this.topic,
-				{ key: record[this.datastore.getDatastore().KEY] },
+				record[this.datastore.getDatastore().KEY],
 				this.name,
 			);
 
@@ -243,7 +237,7 @@ class AirblastController {
 		} catch (error) {
 			// eslint-disable-next-line no-console
 			console.error(error);
-			res.status(error.status || 500).send(error.body);
+			res.status((error && error.status) || 500).send(error.body);
 		}
 	}
 }
