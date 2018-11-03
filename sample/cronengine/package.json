@@ -1,0 +1,19 @@
+{
+  "name": "Cron engine",
+  "version": "1.0.0",
+  "main": "src/router.js",
+  "engines": {
+    "node": "10.x.x"
+  },
+  "author": "Raisely <engineering@raisely.com> (https://github.com/raisely)",
+  "license": "NoHarm",
+  "bugs": {
+    "url": "https://github.com/raisely/airblast/issues"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "airblast": "git+https://github.com/raisely/airblast.git"
+  }
+}
