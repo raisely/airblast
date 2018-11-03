@@ -8,6 +8,10 @@ const CacheableService = require('./cacheableService');
 const configUniqueKeys = ['projectId', 'servicePath', 'namespace', 'email', 'apiEndpoint', 'keyFilename'];
 
 class DatastoreWrapper extends CacheableService {
+	/**
+	  * Datastore wrapper, handles caching so only one instance is created
+	  * per process
+	  */
 	constructor(config) {
 		super(config, {
 			configUniqueKeys,
@@ -16,6 +20,11 @@ class DatastoreWrapper extends CacheableService {
 		});
 	}
 
+	/**
+	  * @param key Fetch a record from datastore by key
+	  * Parses json in the data attribute
+	  * @return {object}
+	  */
 	async get(key) {
 		const result = await this.getDatastore().get(key);
 
@@ -30,6 +39,11 @@ class DatastoreWrapper extends CacheableService {
 		return record;
 	}
 
+	/**
+	  * @param key Key of the document to update
+	  * @param {object} document Document to update
+	  * Performs up to 3 retries in case of network error
+	  */
 	async update(key, document) {
 		return promiseRetry(retry => this.getDatastore().update({
 			key,
@@ -40,6 +54,14 @@ class DatastoreWrapper extends CacheableService {
 		});
 	}
 
+	/**
+	  * Nests the data in a record containig meta data or retries
+	  * and saves the record
+	  * @param {string} name The name of the entity to save
+	  * @param {object} data The data to store on the record
+	  * @param {object} body The body containing runAt property
+	  * @return {object} OF the form { key, record } the record and the key it was saved by
+	  */
 	async save(name, data, body = {}) {
 		const record = {
 			data: JSON.stringify(data),
@@ -64,10 +86,19 @@ class DatastoreWrapper extends CacheableService {
 		return { key, record };
 	}
 
+	/**
+	  * Pass through to datastore.createQuery
+	  * @param {object} key
+	  * @returns {object} Query
+	  */
 	createQuery(key) {
 		return this.getDatastore().createQuery(key);
 	}
 
+	/**
+	  * Pass through to datastore.runQuery
+	  * @param {object} query
+	  */
 	async runQuery(query) {
 		return this.getDatastore().runQuery(query);
 	}

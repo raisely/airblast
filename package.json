@@ -4,7 +4,7 @@
   "description": "Robust cloud function job processors up in minutes",
   "main": "index.js",
   "scripts": {
-    "test": "npm test"
+    "test": "mocha test/**/*.test.js"
   },
   "keywords": [
     "google",

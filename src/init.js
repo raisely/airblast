@@ -7,11 +7,17 @@ function isValidJsFile(filename) {
 	return path.extname(filename) === '.js' && (filename !== 'index.js');
 }
 
-// make this a helper
 /**
+  * Helper to initiaise all controllers in a given directory
+  * As a convenience, it will set controllers on each controller to the same
+  * value as the return value of the function
+  * So controllers can pass jobs to OtherController by
+  *		this.controllers.other.enqueue(data);
+  *
+  * @param {string} dirname Path of the directory containing controller to initialise
   * @param {object} options global options for all controllers
   * @param {object} controllerOptions Map from controller names to individual controller options
-  * @returns {AirblastController[]} Array of initialised controllers
+  * @returns {object} Object mapping controllers by Controller.name
   */
 function init(dirname, options, controllerOptions = {}) {
 	const controllers = {};

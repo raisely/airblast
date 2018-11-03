@@ -4,32 +4,46 @@ const CacheableService = require('./cacheableService');
 // Pubsub config keys used to build unique cache key
 const configUniqueKeys = ['projectId', 'email', 'apiEndpoint', 'keyFilename'];
 
+/**
+  * Wrapper for pubsub instance to ensure single instantiation per process
+  * @example
+  * const pubsub = PubsubWrapper(config);
+  * await pubsub.publish('my_topic', key, 'my_entity_name')
+  */
 class PubsubWrapper extends CacheableService {
-	constructor(config, autoCreateTopic) {
+	/**
+	  * Intantiate a wrapper for Pubsub
+	  * @param {object} config Pubsub configuration
+	  */
+	constructor(config) {
 		super(config, {
 			configUniqueKeys,
 			serviceName: 'Pubsub',
 			Service: PubSub,
 		});
-
-		this.autoCreateTopic = autoCreateTopic;
 	}
 
+	/**
+	  * Create a topic
+	  * @param {string} topic
+	  */
 	async createTopic(topic) {
 		return this.getPubsub().createTopic(topic);
 	}
 
+	/**
+	  * @param {string} topic Topic to publish to
+	  * @param {object} key key to save on message
+	  * @param {string} name Name of entity that key represents
+	  * @return {object} The message published
+	  */
 	async publish(topic, key, name) {
 		const topicObj = await this.getPubsub().topic(topic);
 
 		const [exists] = await topicObj.exists();
 
 		if (!exists) {
-			if (this.autoCreateTopic) {
-				await this.createTopic(topic);
-			} else {
-				throw new Error(`Topic ${topic} does not exist and auto create is disabled.`);
-			}
+			throw new Error(`Topic ${topic} does not exist`);
 		}
 
 		// route the event to the receiver queues
@@ -39,6 +53,12 @@ class PubsubWrapper extends CacheableService {
 		return message;
 	}
 
+	/**
+	  * Decode a message that's received by a subscriber
+	  * Deserialises buffer and parses the JSON
+	  * @param {StringBuffer} input The input message
+	  * @return {object} The decoded message
+	  */
 	static decodeMessage(input) {
 		// check we have the data
 		const message = input.data;

@@ -7,24 +7,65 @@ const Pubsub = require('./services/pubsub');
 
 const { AppError } = require('./helpers/errors');
 
-// Special properties
-// createdAt The date the record was created
-// nextAttempt The next time a record should be attempted
-// lastAttempt Set when processor is starting
-// lastError The most recent error encountered
-// firstError The first error encountered in processing
-// retries The number of retries the record has taken
-
-
-// Default retry period (in hours)
-// Retries at half an hour through to 1 week
 const DEFAULT_RETRY = [0.5, 1, 2, 12, 24, 48, 96, 168];
 
-const DEFAULT_OPTIONS = {
-	autoCreateTopic: true,
-};
+const DEFAULT_OPTIONS = {};
 
+/**
+  * Controller for handling cloud function background jobs
+  * Provides handlers for receiving data from a post, saving that to datastore
+  * and running a background job to process it
+  * It also provides retry handling triggered by a request to retry handling
+  *
+  * Implementations simply need to extend this class and define hooks for validation
+  * and processing
+  *
+  * Receiving Hooks
+  * @method validate({ data* }) Called to validate a payload before saving to datastore
+  * @method beforeSave({ data* }) Called during post or enqueue
+  * @method afterSave({ key, data, pubsubId }) Called during post or enqueue after object is saved
+  *
+  * Processing Hooks
+  * @method beforeProcess({ record*, data }) Called prior to processing a data
+  * @method process({ record*, data }) Called to perform processing on the data
+  * @method afterProcess({ record, data }) Called after a record has been processed and marked
+  * processed
+  *
+  * Changes to arguments marked with * will be saved to datastore
+  * NOTE if you change record during a call to the process hook, that change will be pesisted
+  * **even if** an error is thrown by the processor
+  *
+  * Hook parameters
+  * @param {object} data the data received by post / enqueue for processing
+  * @param {object} key Datastore key that the record and data is saved under
+  * @param {object} pubsubId id that the data is published to pubsub under
+  * @param {object} record metadata record that the data is saved in containing retry information
+  *
+  * Metadata stored on record
+  * @param {Date} createdAt The date the record was created (may be supplied in data)
+  * @param {Date} nextAttempt The next time processing the record should be attempted
+  * @param {Date} lastAttempt The last time processing was attempted on the record
+  * @param {object} lastError serializeError representation of the most recent error in processing
+  * @param {object} firstError serializeError representation of the error encounters on first
+  * attempt to process
+  * @param {integer} retries The number of retries the record has taken to process
+  *
+  */
 class AirblastController {
+	/**
+	  * @param {string} opts.name The name of the controller (Default: guessed from the class name)
+	  * @param {string} opts.topic Pubsub topic to publish jobs on (Default: opts.name)
+	  * @param {string} opts.kind The kind of entity to save records in Datastore (Default: opts.name)
+	  * @param {number[]} opts.retries Array of retry periods (in hours)
+	  * @param {number} opts.maxProcessingTime The maximum grace period for a job to finish
+	  *  processing before retrying (in minutes) (Default: 5)
+	  * @param {function} log Send log messages to this function (Default: false)
+	  * @param {object} datastore Datastore configuration options
+	  * @param {object} pubsub Pubsub configuration options
+	  * @param {function|string} authenticate Authorization Bearer token authentication
+	  * for http requests either a string to compare the token to, or a function that
+	  * returns truthy if the request is authentic
+	  */
 	constructor(opts) {
 		const options = Object.assign({}, DEFAULT_OPTIONS, this.constructor.options, opts);
 
@@ -39,11 +80,11 @@ class AirblastController {
 		this.topic = options.topic || this.name;
 		this.kind = options.kind || this.name;
 		this.retries = options.retries || DEFAULT_RETRY;
-		this.maxProcessingTime = options.masProcessingTime || 5 * 60;
+		this.maxProcessingTime = options.maxProcessingTime || 5 * 60;
 		this.log = options.log || _.noop;
 
 		this.datastore = new Datastore(options.datastore || {});
-		this.pubsub = new Pubsub(options.pubsub || {}, options.autoCreateTopic);
+		this.pubsub = new Pubsub(options.pubsub || {});
 
 		if (options.authenticate) {
 			this.authenticate = _.isString(options.authenticate) ?
@@ -57,6 +98,12 @@ class AirblastController {
 		});
 	}
 
+	/**
+	  * Enqueues data for processing by this controller
+	  * (will cause the beforeSave and afterSave hooks to be called)
+	  * @param {object} data Data to enqueue for processing
+	  * @param {Date} runAt Date to run at (immediately if null)
+	  */
 	async enqueue(data, runAt) {
 		await this.hook('beforeSave', { data });
 
@@ -75,6 +122,11 @@ class AirblastController {
 		return pubsubId;
 	}
 
+	/**
+	  * Handler for receiving data to enqueu for processing via http post
+	  * @param {object} req Express request to process
+	  * @return {object} { status, body } The status code and body to return
+	  */
 	async post(req) {
 		const { data } = req.body;
 
@@ -90,6 +142,11 @@ class AirblastController {
 		};
 	}
 
+	/**
+	  * Receives a job from pubsub for processing
+	  * Causes beforeProcess, process and afterProcess hooks to be called
+	  * @param {StringBuffer} input message from pubsub
+	  */
 	async pubsubMessage(input) {
 		const pubsubMessage = this.pubsub.constructor.decodeMessage(input);
 
@@ -132,6 +189,9 @@ class AirblastController {
 		await this.hook('afterProcess', { record, data: record.data });
 	}
 
+	/**
+	  * Checks all current records in datastore for retries
+	  */
 	async retry() {
 		// Retry failures
 		const query = this.datastore.createQuery([this.kind])
@@ -144,6 +204,9 @@ class AirblastController {
 		return { status: 200, body: { status: 'ok' } };
 	}
 
+	/**
+	  * @param {object} query query to find records to check for retry
+	  */
 	async findAndRetry(query) {
 		const records = await this.datastore.runQuery(query);
 
@@ -155,6 +218,16 @@ class AirblastController {
 		return Promise.all(promises);
 	}
 
+	/**
+	  * Handle setting retries for a record
+	  * if lastAttempt is since nextAttempt
+	  * 	Sets the nextAttempt date and increments retry counter
+	  * if nextAttempt is in the past and lastAttempt is before it
+	  *		Publish the record to be processedAt
+	  * if max retry attempts have been exceeded
+	  *		Set failedAt
+	  * @param {object} record record to process for retrying
+	  */
 	async queueRetry(record) {
 		// If a record has failed to process since it's next attempt time
 		// add a retry, set a nextAttempt date
@@ -192,19 +265,46 @@ class AirblastController {
 		}
 	}
 
+	/**
+	  * Execute hook on this instance by the given name with the opts
+	  * @param {string} name Name of the hook
+	  * @param {object} opts Options to pass to hook
+	  */
 	async hook(name, opts) {
 		if (this[name]) return this[name](opts);
 		return null;
 	}
 
+	/**
+	  * HTTP handler for incoming requests
+	  * @param {object} req Express request object
+	  * @param {object} res Express response object
+	  */
 	async http(req, res) {
 		return this.httpHandler(req, res);
 	}
 
+	/**
+	  * HTTP handler for retry requests
+	  * Causes retry method to be invoked
+	  * @param {object} req Express request object
+	  * @param {object} res Express response object
+	  */
 	async httpRetry(req, res) {
 		return this.httpHandler(req, res, 'retry');
 	}
 
+	/**
+	  * Handler for http requests
+	  * Checks for authentication (if this.authenticate is set)
+	  * and passes the request to this[name](req)
+	  * Handler should return an object { status, body } containig
+	  * the object to return and the status code
+	  *
+	  * @param {object} req Express request object
+	  * @param {object} res Express response object
+	  * @param {string} name Name of the handler function for the request (default: req.method)
+	  */
 	async httpHandler(req, res, name) {
 		try {
 			res.set('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT');
