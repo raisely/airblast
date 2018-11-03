@@ -14,6 +14,11 @@ Example of job chains
 
 ```
 class JobController extends AirblastController {
+  validate(data) {
+    if (!data.about) {
+      throw new this.AppError(400, 'validation', 'Data must contain about attribute');
+    }
+  }
   process(data) {
     this.controllers.email.enqueue(data);
     this.controllers.airtable.enqueue(data);
@@ -25,7 +30,7 @@ class EmailController extends AirblastController {
     sendEmail({
       to: 'admin@myco.example',
       subject: 'Job received',
-      body: `The job id is ${data.about}`
+      body: `The job is about ${data.about}`
     });
   }
 }
@@ -37,5 +42,7 @@ class AirtableController extends AirblastController {
 }
 ```
 
-That's it, you've written your cloud functions, see the [sample](/sample) directory for scripts
+That's it, once you've written your process function,
+you've written cloud functions that are ready to deploy!
+See the [sample](/sample) directory for scripts
 to deploy them.
