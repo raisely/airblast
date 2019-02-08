@@ -25,7 +25,7 @@ function init(dirname, options, controllerOptions = {}) {
 	// Load each controller file
 	Object.assign({}, ...fs.readdirSync(dirname)
 		.filter(isValidJsFile)
-		.forEach((file) => {
+		.map((file) => {
 			// eslint-disable-next-line global-require, import/no-dynamic-require
 			const Controller = require(path.join(dirname, file));
 
