@@ -21,12 +21,13 @@ before(function before() {
 		haveWarned = true;
 	}
 	/* eslint-enable no-console */
-	this.timeout(10000);
-	emulators.push(new DatastoreEmulator());
+	this.timeout(20000);
+	emulators.push(new DatastoreEmulator({ debug: false }));
 	emulators.push(new PubSubEmulator({
 		clean: true,
 		dataDir: './tmp/pubsub',
 		topics: queues,
+		debug: false,
 	}));
 	return Promise.all(emulators.map(e => e.start()));
 });
