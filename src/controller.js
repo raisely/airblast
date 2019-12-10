@@ -126,12 +126,29 @@ class AirblastController {
 		return pubsubId;
 	}
 
+	async get(req) {
+		return {
+			status: 200,
+			body: {
+				message: `${this.name} running`,
+				platform: 'Airblast',
+			},
+		};
+	}
+
 	/**
 	  * Handler for receiving data to enqueu for processing via http post
 	  * @param {object} req Express request to process
 	  * @return {object} { status, body } The status code and body to return
 	  */
 	async post(req) {
+		if (!req.body || JSON.stringify(req.body) === '{}') {
+			return {
+				status: 200,
+				body: { message: 'Received empty webhook body (assuming this was a test)' }
+			}
+		}
+
 		const data = this.wrapInData ? req.body.data : req.body;
 
 		await this.hook('validate', { data });
@@ -349,6 +366,7 @@ class AirblastController {
 		} catch (error) {
 			// eslint-disable-next-line no-console
 			console.error(error);
+			const body = error.body || error.message;
 			res.status((error && error.status) || 500).send(error.body);
 		}
 	}
