@@ -47,6 +47,21 @@ describe('AirblastController', () => {
 	});
 
 	describe('post', () => {
+		describe.only('test response', () => {
+			let res;
+			before(async () => {
+				const req = createPostReq({});
+				const controller = new WithHooksController();
+				controller.validate = () => { throw new Error('validate called on blank request' ); }
+
+				res = await runRequest(controller.http, req);
+			});
+
+			it('returns 200', () => {
+				console.log(res.body);
+				expect(res.statusCode).to.eq(200);
+			});
+		});
 		describe('without hooks', () => {
 			const eventData = {
 				createdAt: new Date().toISOString(),
