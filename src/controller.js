@@ -97,7 +97,7 @@ class AirblastController {
 		}
 
 		// Bind http requests to this controller instance
-		['http', 'httpRetry'].forEach((method) => {
+		['http', 'httpRetry', 'pubsubMessage'].forEach((method) => {
 			this[method] = this[method].bind(this);
 		});
 	}
@@ -145,8 +145,8 @@ class AirblastController {
 		if (!req.body || JSON.stringify(req.body) === '{}') {
 			return {
 				status: 200,
-				body: { message: 'Received empty webhook body (assuming this was a test)' }
-			}
+				body: { message: 'Received empty webhook body (assuming this was a test)' },
+			};
 		}
 
 		const data = this.wrapInData ? req.body.data : req.body;

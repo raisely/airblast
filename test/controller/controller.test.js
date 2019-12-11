@@ -47,12 +47,12 @@ describe('AirblastController', () => {
 	});
 
 	describe('post', () => {
-		describe.only('test response', () => {
+		describe('test response', () => {
 			let res;
 			before(async () => {
 				const req = createPostReq({});
 				const controller = new WithHooksController();
-				controller.validate = () => { throw new Error('validate called on blank request' ); }
+				controller.validate = () => { throw new Error('validate called on blank request'); };
 
 				res = await runRequest(controller.http, req);
 			});
@@ -534,7 +534,11 @@ async function sendPubsubPayload(controller, recordKey, name) {
 		})),
 	};
 
-	return controller.pubsubMessage(pubsubPayload);
+	// Function is called without context in cloud function
+	// ensure it can handle it
+	const fn = controller.pubsubMessage;
+
+	return fn(pubsubPayload);
 }
 
 async function asyncTimeout(time) {
