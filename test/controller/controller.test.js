@@ -24,6 +24,7 @@ EmptyController.options = {
 	authorization: TOKEN,
 	// eslint-disable-next-line no-console
 	log: console.log,
+	corsHosts: ['cors.host.test'],
 };
 class WithHooksController extends AirblastController {}
 WithHooksController.options = {
@@ -44,6 +45,38 @@ describe('AirblastController', () => {
 	before(() => {
 		datastore = new Datastore();
 		pubsub = new Pubsub();
+	});
+
+	describe.only('options', () => {
+		let res;
+		describe('permitted host', () => {
+			before(async () => {
+				const controller = new EmptyController();
+				const req = {
+					method: 'OPTIONS',
+					headers: {
+						origin: 'https://cors.host.test',
+					},
+				};
+				res = await runRequest(controller.http, req);
+			});
+			it('permits host', () => {
+				expect(res.headers['Access-Control-Allow-Origin']).to.eq('https://cors.host.test');
+			});
+		});
+		describe('unpermitted host', () => {
+			before(async () => {
+				const controller = new EmptyController();
+				const req = {
+					method: 'OPTIONS',
+					headers: {
+						origin: 'https://unknown.host.test',
+					},
+				};
+				res = await runRequest(controller.http, req);
+			});
+			it('throws error', () => {});
+		});
 	});
 
 	describe('post', () => {

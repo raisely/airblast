@@ -1,6 +1,6 @@
 {
   "name": "airblast",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Robust cloud function job processors up in minutes",
   "main": "index.js",
   "scripts": {

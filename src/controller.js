@@ -1,6 +1,7 @@
 const serializeError = require('serialize-error');
 const tc = require('timezonecomplete');
 const _ = require('lodash');
+const url = require('url');
 
 const Datastore = require('./services/datastore');
 const Pubsub = require('./services/pubsub');
@@ -65,6 +66,7 @@ class AirblastController {
 	  * @param {function} log Send log messages to this function (Default: false)
 	  * @param {object} datastore Datastore configuration options
 	  * @param {object} pubsub Pubsub configuration options
+	  * @param {string} corsHosts Array of hosts to permit in response to CORS pre-flight
 	  * @param {function|string} authenticate Authorization Bearer token authentication
 	  * for http requests either a string to compare the token to, or a function that
 	  * returns truthy if the request is authentic
@@ -161,6 +163,35 @@ class AirblastController {
 				data,
 			},
 		};
+	}
+
+	async handleOptions(req, res) {
+		res.set('Access-Control-Allow-Origin', req.headers.origin);
+		res.set('Access-Control-Allow-Credentials', true);
+		res.set('Access-Control-Max-Age', '86400');
+		res.set('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT');
+
+		const origin = req.headers.origin || req.headers.Origin;
+
+		if (!origin || origin === '') {
+			throw new AppError(400, 'invalid headers', 'OPTIONS must provide a Origin header in the request');
+		}
+
+		const domain = url.parse(origin).hostname;
+
+		if (!domain) {
+			throw new AppError(400, 'invalid headers', `Origin is malformed (does not include scheme) ${origin}`);
+		}
+
+		// Ignore port when checking since dev servers may run on different ports
+		const permitted = this.options.corsHosts && this.options.corsHosts.includes(domain);
+
+		if (!permitted) {
+			// If it wasn't a trusted domain, throw an error
+			throw new AppError(403, 'forbidden', `Cross origin requests not allowed from this host: ${domain}`);
+		}
+
+		return { status: 200 };
 	}
 
 	/**
@@ -348,7 +379,7 @@ class AirblastController {
 					throw new AppError(401, 'unauthorized', 'Unknown authorization type (expected Authorization: bearer)');
 				}
 				if (!(token && this.authenticate(token))) {
-					throw new AppError(401, 'Unauthorized', 'The token provided is not valid');
+					throw new AppError(401, 'unauthorized', 'The token provided is not valid');
 				}
 
 				if (!(auth && (await this.authenticate(token)))) {
@@ -356,18 +387,20 @@ class AirblastController {
 				}
 			}
 
-			const handler = name || req.method.toLowerCase();
+			let handler = name || req.method.toLowerCase();
+			if (handler === 'options') handler = 'handleOptions';
 
 			if (!this[handler]) throw new AppError(404, 'not found', 'Resource cannot be found');
 
-			const result = await this[handler](req);
+			const result = await this[handler](req, res);
 
-			res.status(result.status).send(result.body);
+			res.status(result.status)
+			if (result.body) res.send(result.body);
 		} catch (error) {
 			// eslint-disable-next-line no-console
 			console.error(error);
 			const body = error.body || error.message;
-			res.status((error && error.status) || 500).send(error.body);
+			res.status((error && error.status) || 500).send(body);
 		}
 	}
 }
