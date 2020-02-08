@@ -5,10 +5,12 @@ const uuidv1 = require('uuid/v1');
 const serializeError = require('serialize-error');
 const containSubset = require('chai-subset');
 const chai = require('chai');
+const chaiAsPromised = require('chai-as-promised');
 const sinon = require('sinon');
 const _ = require('lodash');
 
 chai.use(containSubset);
+chai.use(chaiAsPromised);
 const { expect } = chai;
 
 const TOKEN = 'SECRET TOKEN!';
@@ -65,17 +67,21 @@ describe('AirblastController', () => {
 			});
 		});
 		describe('unpermitted host', () => {
-			before(async () => {
-				const controller = new EmptyController();
-				const req = {
+			let controller;
+			let req;
+			before(() => {
+				controller = new EmptyController();
+				req = {
 					method: 'OPTIONS',
 					headers: {
 						origin: 'https://unknown.host.test',
 					},
 				};
-				res = await runRequest(controller.http, req);
 			});
-			it('throws error', () => {});
+			it('throws error', async () => {
+				const promise = runRequest(controller.http, req);
+				await expect(promise).to.be.rejectedWith('Cross origin requests not allowed from this host: unknown.host.test');
+			});
 		});
 	});
 
