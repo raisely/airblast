@@ -13,7 +13,7 @@ chai.use(containSubset);
 chai.use(chaiAsPromised);
 const { expect } = chai;
 
-const TOKEN = 'SECRET TOKEN!';
+const TOKEN = 'SECRET_TOKEN!';
 
 require('./specHelper');
 
@@ -33,6 +33,10 @@ WithHooksController.options = {
 	// eslint-disable-next-line no-console
 	log: console.log,
 };
+class CustomAuthController extends AirblastController {}
+CustomAuthController.options = {
+	log: console.log,
+};
 
 const hookNames = ['validate', 'beforeSave', 'afterSave', 'beforeProcess', 'process', 'afterProcess'];
 
@@ -49,7 +53,7 @@ describe('AirblastController', () => {
 		pubsub = new Pubsub();
 	});
 
-	describe.only('options', () => {
+	describe('options', () => {
 		let res;
 		describe('permitted host', () => {
 			before(async () => {
@@ -88,17 +92,52 @@ describe('AirblastController', () => {
 	describe('post', () => {
 		describe('test response', () => {
 			let res;
-			before(async () => {
-				const req = createPostReq({});
-				const controller = new WithHooksController();
+			let controller;
+			let authToken;
+
+			before(() => {
+				CustomAuthController.options.authenticate = (token) => {
+					authToken = token;
+					return true;
+				};
+				controller = new CustomAuthController();
 				controller.validate = () => { throw new Error('validate called on blank request'); };
-
-				res = await runRequest(controller.http, req);
 			});
-
-			it('returns 200', () => {
-				console.log(res.body);
-				expect(res.statusCode).to.eq(200);
+			describe('WITH bearer auth', () => {
+				before(async () => {
+					const req = createPostReq({});
+					res = await runRequest(controller.http, req);
+				});
+				it('returns 200', () => { expect(res.statusCode).to.eq(200); });
+				it('receives the just the token', () => expect(authToken).to.eq(TOKEN));
+			});
+			describe('WITH simple auth', () => {
+				before(async () => {
+					authToken = null;
+					const req = createPostReq({}, 'something shared-secret');
+					res = await runRequest(controller.http, req);
+				});
+				it('returns 200', () => { expect(res.statusCode).to.eq(200); });
+				it('receives the full auth header', () => expect(authToken).to.eq('something shared-secret'));
+			});
+			describe('WITHOUT auth', () => {
+				before(async () => {
+					authToken = 'not received';
+					const req = createPostReq({}, null);
+					res = await runRequest(controller.http, req, false);
+				});
+				it('returns 401', () => { expect(res.statusCode).to.eq(401); });
+			});
+			describe('WHEN forbidden', () => {
+				before(async () => {
+					authToken = null;
+					const req = createPostReq({});
+					// Will fail when token is missing
+					CustomAuthController.options.authenticate = () => false;
+					controller = new CustomAuthController();
+					res = await runRequest(controller.http, req, false);
+				});
+				it('returns 401', () => { expect(res.statusCode).to.eq(401); });
 			});
 		});
 		describe('without hooks', () => {
@@ -125,9 +164,7 @@ describe('AirblastController', () => {
 			});
 			after(() => subscription.delete());
 
-			it('returns 200', () => {
-				expect(res.statusCode).to.eq(200);
-			});
+			it('returns 200', () => { expect(res.statusCode).to.eq(200); });
 
 			itSavesAndPublishes(eventData, container);
 
@@ -463,21 +500,24 @@ function itMarksTheRecordProcessed(container) {
 	});
 }
 
-function createPostReq(body) {
+function createPostReq(body, auth) {
+	let authorization = auth;
+	if (!auth && auth !== null) authorization = `Bearer ${TOKEN}`;
 	return {
 		method: 'POST',
 		headers: {
-			authorization: `Bearer ${TOKEN}`,
+			authorization,
 		},
 		body,
 	};
 }
 
-async function runRequest(fn, req) {
+async function runRequest(fn, req, shouldThrow = true) {
 	const res = new MockResponse();
 	await fn(req, res);
-	if (res.statusCode !== 200) {
-		throw new Error(res.body);
+	if (shouldThrow && (res.statusCode !== 200)) {
+		console.error(res.body);
+		throw new Error(res.body.errors[0].message);
 	}
 	return res;
 }
