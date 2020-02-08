@@ -139,6 +139,15 @@ describe('AirblastController', () => {
 				});
 				it('returns 401', () => { expect(res.statusCode).to.eq(401); });
 			});
+			describe('WITH bearer auth string', () => {
+				before(async () => {
+					const req = createPostReq({});
+					CustomAuthController.options.authenticate = TOKEN;
+					controller = new CustomAuthController();
+					res = await runRequest(controller.http, req);
+				});
+				it('returns 200', () => { expect(res.statusCode).to.eq(200); });
+			});
 		});
 		describe('without hooks', () => {
 			const eventData = {
