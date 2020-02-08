@@ -379,7 +379,7 @@ class AirblastController {
 					token = tokens.join(' ');
 				}
 
-				const isAuthorized = token && this.authenticate(token);
+				const isAuthorized = token && await this.authenticate(token);
 
 				if (!isAuthorized) {
 					const message = token ?

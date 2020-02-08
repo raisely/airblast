@@ -133,7 +133,7 @@ describe('AirblastController', () => {
 					authToken = null;
 					const req = createPostReq({});
 					// Will fail when token is missing
-					CustomAuthController.options.authenticate = () => false;
+					CustomAuthController.options.authenticate = async () => false;
 					controller = new CustomAuthController();
 					res = await runRequest(controller.http, req, false);
 				});
