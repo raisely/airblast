@@ -9,6 +9,8 @@ const chaiAsPromised = require('chai-as-promised');
 const sinon = require('sinon');
 const _ = require('lodash');
 
+const runController = require('../runController');
+
 chai.use(containSubset);
 chai.use(chaiAsPromised);
 const { expect } = chai;
@@ -18,7 +20,6 @@ const TOKEN = 'SECRET_TOKEN!';
 require('./specHelper');
 
 const { AirblastController } = require('../../index');
-const MockResponse = require('../utils/mockResponse');
 const { subscribe } = require('./pubsubHelper');
 
 class EmptyController extends AirblastController {}
@@ -64,7 +65,7 @@ describe('AirblastController', () => {
 						origin: 'https://cors.host.test',
 					},
 				};
-				res = await runRequest(controller.http, req);
+				res = await runController(controller, req);
 			});
 			it('permits host', () => {
 				expect(res.headers['Access-Control-Allow-Origin']).to.eq('https://cors.host.test');
@@ -83,7 +84,7 @@ describe('AirblastController', () => {
 				};
 			});
 			it('throws error', async () => {
-				const promise = runRequest(controller.http, req);
+				const promise = runController(controller, req);
 				await expect(promise).to.be.rejectedWith('Cross origin requests not allowed from this host: unknown.host.test');
 			});
 		});
@@ -106,7 +107,7 @@ describe('AirblastController', () => {
 			describe('WITH bearer auth', () => {
 				before(async () => {
 					const req = createPostReq({});
-					res = await runRequest(controller.http, req);
+					res = await runController(controller, req);
 				});
 				it('returns 200', () => { expect(res.statusCode).to.eq(200); });
 				it('receives the just the token', () => expect(authToken).to.eq(TOKEN));
@@ -115,7 +116,7 @@ describe('AirblastController', () => {
 				before(async () => {
 					authToken = null;
 					const req = createPostReq({}, 'something shared-secret');
-					res = await runRequest(controller.http, req);
+					res = await runController(controller, req);
 				});
 				it('returns 200', () => { expect(res.statusCode).to.eq(200); });
 				it('receives the full auth header', () => expect(authToken).to.eq('something shared-secret'));
@@ -124,7 +125,8 @@ describe('AirblastController', () => {
 				before(async () => {
 					authToken = 'not received';
 					const req = createPostReq({}, null);
-					res = await runRequest(controller.http, req, false);
+					req.throwOnError = false;
+					res = await runController(controller, req);
 				});
 				it('returns 401', () => { expect(res.statusCode).to.eq(401); });
 			});
@@ -135,7 +137,8 @@ describe('AirblastController', () => {
 					// Will fail when token is missing
 					CustomAuthController.options.authenticate = async () => false;
 					controller = new CustomAuthController();
-					res = await runRequest(controller.http, req, false);
+					req.throwOnError = false;
+					res = await runController(controller, req);
 				});
 				it('returns 401', () => { expect(res.statusCode).to.eq(401); });
 			});
@@ -144,7 +147,7 @@ describe('AirblastController', () => {
 					const req = createPostReq({});
 					CustomAuthController.options.authenticate = TOKEN;
 					controller = new CustomAuthController();
-					res = await runRequest(controller.http, req);
+					res = await runController(controller, req);
 				});
 				it('returns 200', () => { expect(res.statusCode).to.eq(200); });
 			});
@@ -166,7 +169,7 @@ describe('AirblastController', () => {
 				const subscriptionDetails = await subscribe(pubsub, 'Empty', 1);
 				({ subscription } = subscriptionDetails);
 
-				res = await runRequest(controller.http, req);
+				res = await runController(controller, req);
 
 				const messages = await subscriptionDetails.promise;
 				Object.assign(container, { datastore, messages });
@@ -207,7 +210,7 @@ describe('AirblastController', () => {
 				['validate', 'beforeSave', 'afterSave']
 					.forEach((hook) => { hooks[hook] = sinon.spy(controller, hook); });
 
-				await runRequest(controller.http, req);
+				await runController(controller, req);
 			});
 
 			itCallsHook(hooks, 'validate', { data: eventData });
@@ -367,7 +370,7 @@ describe('AirblastController', () => {
 				const subscriptionDetails = await subscribe(pubsub, 'Empty', 0);
 				({ subscription, messages } = subscriptionDetails);
 				Object.assign(container, { datastore, messages });
-				await runRequest(controller.httpRetry, createPostReq({}));
+				await runController(controller, createRetryReq({}));
 			});
 			after(() => Promise.all([
 				subscription.delete(),
@@ -392,7 +395,7 @@ describe('AirblastController', () => {
 				({ subscription, messages, promise } = subscriptionDetails);
 				Object.assign(container, { datastore, messages });
 
-				await runRequest(controller.httpRetry, createPostReq({}));
+				await runController(controller, createRetryReq({}));
 				await promise;
 			});
 			after(() => Promise.all([
@@ -417,7 +420,7 @@ describe('AirblastController', () => {
 				({ subscription, messages } = subscriptionDetails);
 				Object.assign(container, { datastore, messages });
 
-				await runRequest(controller.httpRetry, createPostReq({}));
+				await runController(controller, createRetryReq({}));
 			});
 			after(() => Promise.all([
 				subscription.delete(),
@@ -454,7 +457,7 @@ describe('AirblastController', () => {
 				({ subscription, messages, promise } = subscriptionDetails);
 				Object.assign(container, { datastore, messages });
 
-				await runRequest(controller.httpRetry, createPostReq({}));
+				await runController(controller, createRetryReq({}));
 				await promise;
 			});
 			after(() => Promise.all([
@@ -482,7 +485,7 @@ describe('AirblastController', () => {
 				({ subscription, messages } = subscriptionDetails);
 				Object.assign(container, { datastore, messages });
 
-				await runRequest(controller.httpRetry, createPostReq({}));
+				await runController(controller, createRetryReq({}));
 			});
 			after(() => Promise.all([
 				subscription.delete(),
@@ -509,6 +512,12 @@ function itMarksTheRecordProcessed(container) {
 	});
 }
 
+function createRetryReq(body, auth) {
+	const req = createPostReq(body, auth);
+	req.function = 'httpRetry';
+	return req;
+}
+
 function createPostReq(body, auth) {
 	let authorization = auth;
 	if (!auth && auth !== null) authorization = `Bearer ${TOKEN}`;
@@ -518,17 +527,8 @@ function createPostReq(body, auth) {
 			authorization,
 		},
 		body,
+		mockEnqueue: false,
 	};
-}
-
-async function runRequest(fn, req, shouldThrow = true) {
-	const res = new MockResponse();
-	await fn(req, res);
-	if (shouldThrow && (res.statusCode !== 200)) {
-		console.error(res.body);
-		throw new Error(res.body.errors[0].message);
-	}
-	return res;
 }
 
 function itDoesNotChangeTheRecord(container) {
