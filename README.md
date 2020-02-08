@@ -73,3 +73,33 @@ gcloud compute project-info add-metadata --metadata google-compute-default-regio
 # Re-run gcloud init to make use of your new defaults
 gcloud init
 ```
+
+
+## Testing
+
+Most of the time you can test your controller simply by running
+`controller.process(body)`
+but if you need to test the webhook endpoint with authorization and 
+validation, there is a helper to help you:
+
+```javascript
+const runController = require('airblast/test/runController');
+
+await runController(new MyController(), {
+  body: { my: 'value' },
+});
+```
+
+Options and default values that you can pass to 
+
+```
+{
+  // The controller function to execute (defaults to the function that receives and routes
+  // the http requests, usuall you don't need to change this)
+  function: 'http',
+  // Mock the enqueue (avoids the need for datastore & pubsub emulators)
+  mockEnqueue: true,
+  // Throw an error if the response status is not 200
+  throwOnError: true,
+}
+```
