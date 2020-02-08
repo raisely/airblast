@@ -147,7 +147,7 @@ class AirblastController {
 		if (!req.body || JSON.stringify(req.body) === '{}') {
 			return {
 				status: 200,
-				body: { message: 'Received empty webhook body (assuming this was a test)' },
+				body: { message: 'Received empty webhook body (assuming this was a test, no jobs were enqueued)' },
 			};
 		}
 
@@ -370,20 +370,18 @@ class AirblastController {
 			res.set('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT');
 			res.set('Access-Control-Allow-Headers', 'Access-Control-Allow-Headers, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers');
 
-			const auth = req.headers.authorization || req.headers.Authorization;
-
 			if (this.authenticate) {
-				const [bearer, token] = auth ? auth.split(' ') : ['bearer', null];
-
-				if (bearer.toLowerCase() !== 'bearer') {
-					throw new AppError(401, 'unauthorized', 'Unknown authorization type (expected Authorization: bearer)');
+				const auth = req.headers.authorization || req.headers.Authorization;
+				let token = auth;
+				if (token && token.toLowerCase().startsWith('bearer')) {
+					const [bearer, ...tokens] = auth.split(' ');
+					token = tokens.join(' ');
 				}
-				if (!(token && this.authenticate(token))) {
+
+				const isAuthorized = token && this.authenticate(token);
+
+				if (!isAuthorized) {
 					throw new AppError(401, 'unauthorized', 'The token provided is not valid');
-				}
-
-				if (!(auth && (await this.authenticate(token)))) {
-					throw new AppError(401, 'unauthorized', 'The token provided is not valid.');
 				}
 			}
 
@@ -394,7 +392,7 @@ class AirblastController {
 
 			const result = await this[handler](req, res);
 
-			res.status(result.status)
+			res.status(result.status);
 			if (result.body) res.send(result.body);
 		} catch (error) {
 			// eslint-disable-next-line no-console
