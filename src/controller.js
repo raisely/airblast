@@ -67,9 +67,10 @@ class AirblastController {
 	  * @param {object} datastore Datastore configuration options
 	  * @param {object} pubsub Pubsub configuration options
 	  * @param {string} corsHosts Array of hosts to permit in response to CORS pre-flight
-	  * @param {function|string} authenticate Authorization Bearer token authentication
+	  * @param {function|string} authenticate Authorization Authentication
 	  * for http requests either a string to compare the token to, or a function that
-	  * returns truthy if the request is authentic
+	  * receives either a bearer token or the full auth header and returns truthy if the request is authentic
+	  * If this value is truthy and no authenticate header is present, the server will respond with 401
 	  */
 	constructor(opts) {
 		const options = Object.assign({}, DEFAULT_OPTIONS, this.constructor.options, opts);
@@ -381,7 +382,10 @@ class AirblastController {
 				const isAuthorized = token && this.authenticate(token);
 
 				if (!isAuthorized) {
-					throw new AppError(401, 'unauthorized', 'The token provided is not valid');
+					const message = token ?
+						'The authorization provided is not valid' :
+						'Authorization header is required';
+					throw new AppError(401, 'unauthorized', message);
 				}
 			}
 
