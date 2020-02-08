@@ -31,6 +31,7 @@
     "babel-eslint": "^8.2.3",
     "babel-preset-env": "^1.6.1",
     "chai": "^4.2.0",
+    "chai-as-promised": "^7.1.1",
     "chai-subset": "^1.6.0",
     "eslint": "^4.16.0",
     "eslint-config-airbnb-base": "^12.1.0",
