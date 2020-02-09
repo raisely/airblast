@@ -167,11 +167,6 @@ class AirblastController {
 	}
 
 	async handleOptions(req, res) {
-		res.set('Access-Control-Allow-Origin', req.headers.origin);
-		res.set('Access-Control-Allow-Credentials', true);
-		res.set('Access-Control-Max-Age', '86400');
-		res.set('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT');
-
 		const origin = req.headers.origin || req.headers.Origin;
 
 		if (!origin || origin === '') {
@@ -369,7 +364,10 @@ class AirblastController {
 	async httpHandler(req, res, name) {
 		try {
 			res.set('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT');
-			res.set('Access-Control-Allow-Headers', 'Access-Control-Allow-Headers, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers');
+			res.set('Access-Control-Allow-Headers', 'Access-Control-Allow-Headers, Authorization, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers');
+			res.set('Access-Control-Allow-Origin', req.headers.origin);
+			res.set('Access-Control-Allow-Credentials', true);
+			res.set('Access-Control-Max-Age', '86400');
 
 			let handler = name || req.method.toLowerCase();
 			if (handler === 'options') handler = 'handleOptions';
