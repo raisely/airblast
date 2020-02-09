@@ -371,7 +371,11 @@ class AirblastController {
 			res.set('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT');
 			res.set('Access-Control-Allow-Headers', 'Access-Control-Allow-Headers, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers');
 
-			if (this.authenticate) {
+			let handler = name || req.method.toLowerCase();
+
+			// Don't authenticate options requests as they won't have
+			// an auth header
+			if ((!['options'].includes(handler)) && this.authenticate) {
 				const auth = req.headers.authorization || req.headers.Authorization;
 				let token = auth;
 				if (token && token.toLowerCase().startsWith('bearer')) {
@@ -389,7 +393,6 @@ class AirblastController {
 				}
 			}
 
-			let handler = name || req.method.toLowerCase();
 			if (handler === 'options') handler = 'handleOptions';
 
 			if (!this[handler]) throw new AppError(404, 'not found', 'Resource cannot be found');
