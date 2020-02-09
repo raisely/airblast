@@ -192,7 +192,7 @@ class AirblastController {
 			throw new AppError(403, 'forbidden', `Cross origin requests not allowed from this host: ${domain}`);
 		}
 
-		return { status: 200 };
+		return { status: 200, body: {} };
 	}
 
 	/**
@@ -372,10 +372,13 @@ class AirblastController {
 			res.set('Access-Control-Allow-Headers', 'Access-Control-Allow-Headers, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers');
 
 			let handler = name || req.method.toLowerCase();
+			if (handler === 'options') handler = 'handleOptions';
+
+			if (!this[handler]) throw new AppError(404, 'not found', 'Resource cannot be found');
 
 			// Don't authenticate options requests as they won't have
 			// an auth header
-			if ((!['options'].includes(handler)) && this.authenticate) {
+			if ((!['handleOptions', 'retry'].includes(handler)) && this.authenticate) {
 				const auth = req.headers.authorization || req.headers.Authorization;
 				let token = auth;
 				if (token && token.toLowerCase().startsWith('bearer')) {
@@ -392,10 +395,6 @@ class AirblastController {
 					throw new AppError(401, 'unauthorized', message);
 				}
 			}
-
-			if (handler === 'options') handler = 'handleOptions';
-
-			if (!this[handler]) throw new AppError(404, 'not found', 'Resource cannot be found');
 
 			const result = await this[handler](req, res);
 
