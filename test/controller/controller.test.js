@@ -24,7 +24,7 @@ const { subscribe } = require('./pubsubHelper');
 
 class EmptyController extends AirblastController {}
 EmptyController.options = {
-	authorization: TOKEN,
+	authenticate: TOKEN,
 	// eslint-disable-next-line no-console
 	log: console.log,
 	corsHosts: ['cors.host.test'],
@@ -96,60 +96,85 @@ describe('AirblastController', () => {
 			let controller;
 			let authToken;
 
-			before(() => {
-				CustomAuthController.options.authenticate = (token) => {
-					authToken = token;
-					return true;
-				};
-				controller = new CustomAuthController();
-				controller.validate = () => { throw new Error('validate called on blank request'); };
-			});
-			describe('WITH bearer auth', () => {
-				before(async () => {
-					const req = createPostReq({});
-					res = await runController(controller, req);
-				});
-				it('returns 200', () => { expect(res.statusCode).to.eq(200); });
-				it('receives the just the token', () => expect(authToken).to.eq(TOKEN));
-			});
-			describe('WITH simple auth', () => {
-				before(async () => {
-					authToken = null;
-					const req = createPostReq({}, 'something shared-secret');
-					res = await runController(controller, req);
-				});
-				it('returns 200', () => { expect(res.statusCode).to.eq(200); });
-				it('receives the full auth header', () => expect(authToken).to.eq('something shared-secret'));
-			});
-			describe('WITHOUT auth', () => {
-				before(async () => {
-					authToken = 'not received';
-					const req = createPostReq({}, null);
-					req.throwOnError = false;
-					res = await runController(controller, req);
-				});
-				it('returns 401', () => { expect(res.statusCode).to.eq(401); });
-			});
-			describe('WHEN forbidden', () => {
-				before(async () => {
-					authToken = null;
-					const req = createPostReq({});
-					// Will fail when token is missing
-					CustomAuthController.options.authenticate = async () => false;
-					controller = new CustomAuthController();
-					req.throwOnError = false;
-					res = await runController(controller, req);
-				});
-				it('returns 401', () => { expect(res.statusCode).to.eq(401); });
-			});
-			describe('WITH bearer auth string', () => {
-				before(async () => {
-					const req = createPostReq({});
+			describe('WITH auth string', () => {
+				before(() => {
 					CustomAuthController.options.authenticate = TOKEN;
 					controller = new CustomAuthController();
-					res = await runController(controller, req);
+					controller.validate = () => { throw new Error('validate called on blank request'); };
 				});
-				it('returns 200', () => { expect(res.statusCode).to.eq(200); });
+				describe('WHEN token is present', () => {
+					before(async () => {
+						const req = createPostReq({}, TOKEN);
+						req.throwOnError = false;
+						res = await runController(controller, req);
+					});
+					it('returns 200', () => { expect(res.statusCode).to.eq(200); });
+				});
+				describe('WHEN token is missing', () => {
+					before(async () => {
+						const req = createPostReq({}, null);
+						req.throwOnError = false;
+						res = await runController(controller, req);
+					});
+					it('returns 301', () => { expect(res.statusCode).to.eq(401); });
+				});
+			});
+			describe('WITH auth function', () => {
+				before(() => {
+					CustomAuthController.options.authenticate = (token) => {
+						authToken = token;
+						return true;
+					};
+					controller = new CustomAuthController();
+					controller.validate = () => { throw new Error('validate called on blank request'); };
+				});
+				describe('WITH bearer auth', () => {
+					before(async () => {
+						const req = createPostReq({});
+						res = await runController(controller, req);
+					});
+					it('returns 200', () => { expect(res.statusCode).to.eq(200); });
+					it('receives the just the token', () => expect(authToken).to.eq(TOKEN));
+				});
+				describe('WITH simple auth', () => {
+					before(async () => {
+						authToken = null;
+						const req = createPostReq({}, 'something shared-secret');
+						res = await runController(controller, req);
+					});
+					it('returns 200', () => { expect(res.statusCode).to.eq(200); });
+					it('receives the full auth header', () => expect(authToken).to.eq('something shared-secret'));
+				});
+				describe('WITHOUT auth', () => {
+					before(async () => {
+						authToken = 'not received';
+						const req = createPostReq({}, null);
+						req.throwOnError = false;
+						res = await runController(controller, req);
+					});
+					it('returns 401', () => { expect(res.statusCode).to.eq(401); });
+				});
+				describe('WHEN forbidden', () => {
+					before(async () => {
+						authToken = null;
+						const req = createPostReq({});
+						// Will fail when token is missing
+						CustomAuthController.options.authenticate = async () => false;
+						controller = new CustomAuthController();
+						req.throwOnError = false;
+						res = await runController(controller, req);
+					});
+					it('returns 401', () => { expect(res.statusCode).to.eq(401); });
+				});
+				describe('WITH bearer auth string', () => {
+					before(async () => {
+						const req = createPostReq({});
+						CustomAuthController.options.authenticate = TOKEN;
+						controller = new CustomAuthController();
+						res = await runController(controller, req);
+					});
+					it('returns 200', () => { expect(res.statusCode).to.eq(200); });
+				});
 			});
 		});
 		describe('without hooks', () => {
