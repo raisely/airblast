@@ -401,6 +401,11 @@ class AirblastController {
 		} catch (error) {
 			// eslint-disable-next-line no-console
 			console.error(error);
+			const debugHeaders = Object.keys(req.headers)
+				.filter(h => h !== 'authorization')
+				.map(key => `${key}: ${req.headers[key]}`)
+				.join('\n');
+			console.log(debugHeaders);
 			const body = error.body || error.message;
 			res.status((error && error.status) || 500).send(body);
 		}
