@@ -54,6 +54,49 @@ describe('AirblastController', () => {
 		pubsub = new Pubsub();
 	});
 
+	describe('get', () => {
+		describe('test response', () => {
+			let res;
+			let controller;
+			let authToken;
+
+			describe('WITH auth string', () => {
+				before(() => {
+					CustomAuthController.options.authenticate = TOKEN;
+					controller = new CustomAuthController();
+					controller.validate = () => { throw new Error('validate called on blank request'); };
+				});
+				describe('WHEN token is present', () => {
+					before(async () => {
+						const req = {
+							method: 'GET',
+							headers: {
+							},
+							mockEnqueue: false,
+						};
+						req.throwOnError = false;
+						res = await runController(controller, req);
+					});
+					it('returns 200', () => { expect(res.statusCode).to.eq(200); });
+					it('notes unauthorized', () => {
+						expect(res.body).to.deep.eq({
+							error: 'Authorization header is required',
+							message: 'request received, but authorization is invalid',
+						});
+					});
+				});
+				describe('WHEN token is missing', () => {
+					before(async () => {
+						const req = createPostReq({}, null);
+						req.throwOnError = false;
+						res = await runController(controller, req);
+					});
+					it('returns 301', () => { expect(res.statusCode).to.eq(401); });
+				});
+			});
+		});
+	});
+
 	describe('options', () => {
 		let res;
 		describe('permitted host', () => {

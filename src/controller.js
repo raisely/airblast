@@ -390,6 +390,15 @@ class AirblastController {
 					const message = token ?
 						'The authorization provided is not valid' :
 						'Authorization header is required';
+
+					if (handler === 'get') {
+						res.status(200);
+						res.send({
+							message: 'request received, but authorization is invalid',
+							error: message,
+						});
+						return;
+					}
 					throw new AppError(401, 'unauthorized', message);
 				}
 			}
