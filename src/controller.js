@@ -412,9 +412,11 @@ class AirblastController {
 			console.error(error);
 			const debugHeaders = Object.keys(req.headers)
 				.filter(h => h !== 'authorization')
-				.map(key => `${key}: ${req.headers[key]}`)
-				.join('\n');
-			console.log(debugHeaders);
+				.map(key => `${key}: ${req.headers[key]}`);
+			debugHeaders.unshift(`method: ${req.method}`);
+			debugHeaders.unshift(`url: ${req.originalUrl}`);
+
+			console.log(debugHeaders.join('\n'));
 			const body = error.body || error.message;
 			res.status((error && error.status) || 500).send(body);
 		}
