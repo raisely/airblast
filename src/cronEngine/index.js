@@ -5,6 +5,7 @@ const packageJson = require('../../package');
 
 const fastify = Fastify({
 	logger: true,
+	disableRequestLogging: true,
 });
 
 // Health route
@@ -13,6 +14,11 @@ fastify.get('/', (req, reply) => {
 });
 fastify.get('/retry', runRetries);
 
+const health = (req, reply) => {
+	reply.send({ status: 'ok' });
+};
+fastify.get('/_ah/start', health);
+fastify.get('/_ah/warmup', health);
 
 async function doRetry(job, req) {
 	const options = typeof job === 'string' ? { uri: job } : { ...job };
@@ -27,6 +33,10 @@ async function doRetry(job, req) {
 let allJobs;
 
 async function runRetries(req, reply) {
+	req.log.info({
+		url: req.raw.url,
+		method: req.raw.method,
+	});
 	await Promise.all(allJobs.map(job => doRetry(job.request, req, reply)));
 	reply.send({ status: 'ok' });
 }
@@ -37,7 +47,6 @@ module.exports = {
 		const PORT = process.env.PORT || 8080;
 		try {
 			const address = await fastify.listen(PORT);
-			fastify.log.info(`server listening on ${address}`);
 			return address;
 		} catch (e) {
 			console.error(e);
