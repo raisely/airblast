@@ -1,33 +1,52 @@
-const { CronJob } = require('cron');
 const request = require('request-promise-native');
-const package = require('../../package');
+const Fastify = require('fastify');
 
-let cronTasks = [];
+const packageJson = require('../../package');
 
-function makeRequest(req) {
-	const options = typeof req === 'string' ? { uri: req } : { ...req };
+const fastify = Fastify({
+	logger: true,
+});
+
+// Health route
+fastify.get('/', (req, reply) => {
+	reply.send({ name: 'Airblast Cron Engine' });
+});
+fastify.get('/retry', runRetries);
+
+
+async function doRetry(job, req) {
+	const options = typeof job === 'string' ? { uri: job } : { ...job };
 	Object.assign(options, {
 		headers: {
-			'User-Agent': `Airblast Cron Engine ${package.version}`,
+			'User-Agent': `Airblast Cron Retry ${packageJson.version}`,
 		},
 	});
-	request(options).catch(console.error);
+	return request(options).catch(req.log.error);
+}
+
+let allJobs;
+
+async function runRetries(req, reply) {
+	await Promise.all(allJobs.map(job => doRetry(job.request, req, reply)));
+	reply.send({ status: 'ok' });
 }
 
 module.exports = {
-	start: (jobs) => {
-		jobs.forEach((job) => {
-			cronTasks.push(new CronJob({
-				cronTime: job.schedule,
-				onTick: () => makeRequest(job.request),
-				timezone: job.timezone,
-				start: true,
-			}));
-		});
+	start: async (jobs) => {
+		allJobs = jobs;
+		const PORT = process.env.PORT || 8080;
+		try {
+			const address = await fastify.listen(PORT);
+			fastify.log.info(`server listening on ${address}`);
+			return address;
+		} catch (e) {
+			console.error(e);
+			throw e;
+		}
 	},
 
-	stop: () => {
-		cronTasks.forEach(task => task.stop());
-		cronTasks = [];
+	stop: async () => {
+		allJobs = [];
+		return fastify.close();
 	},
 };

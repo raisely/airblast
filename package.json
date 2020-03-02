@@ -1,6 +1,6 @@
 {
   "name": "airblast",
-  "version": "0.1.11",
+  "version": "0.2.0",
   "description": "Robust cloud function job processors up in minutes",
   "main": "index.js",
   "scripts": {
@@ -18,7 +18,7 @@
     "@google-cloud/datastore": "^1.4.0",
     "@google-cloud/error-reporting": "^0.5.1",
     "@google-cloud/pubsub": "^0.18.0",
-    "cron": "^1.5.0",
+    "fastify": "^2.12.1",
     "lodash": "^4.17.11",
     "promise-retry": "^1.1.1",
     "request-promise-native": "^1.0.5",
