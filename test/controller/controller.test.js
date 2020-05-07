@@ -64,7 +64,8 @@ describe('AirblastController', () => {
 				before(() => {
 					CustomAuthController.options.authenticate = TOKEN;
 					controller = new CustomAuthController();
-					controller.validate = () => { throw new Error('validate called on blank request'); };
+					controller.options.alwaysAuthenticate = false;
+					controller.authenticate = () => { throw new Error('validate called on blank request'); };
 				});
 				describe('WHEN token is present', () => {
 					before(async () => {
@@ -91,7 +92,19 @@ describe('AirblastController', () => {
 						req.throwOnError = false;
 						res = await runController(controller, req);
 					});
-					it('returns 301', () => { expect(res.statusCode).to.eq(401); });
+					it('returns 401', () => { expect(res.statusCode).to.eq(401); });
+				});
+				describe('WHEN alwaysAuthenticate is true', () => {
+					let authCalled = false;
+					before(async () => {
+						controller.options.alwaysAuthenticate = true;
+						controller.authenticate = () => authCalled = true;
+						const req = createPostReq({}, null);
+						req.throwOnError = false;
+						res = await runController(controller, req);
+					});
+					it('returns 200', () => { expect(res.statusCode).to.eq(200); });
+					it('calls authenticate', () => { expect(authCalled).to.eq(true); })
 				});
 			});
 		});

@@ -63,11 +63,12 @@ class AirblastController {
 	  * @param {number[]} opts.retries Array of retry periods (in hours)
 	  * @param {number} opts.maxProcessingTime The maximum grace period for a job to finish
 	  *  processing before retrying (in minutes) (Default: 5)
-	  * @param {function} log Send log messages to this function (Default: false)
-	  * @param {object} datastore Datastore configuration options
-	  * @param {object} pubsub Pubsub configuration options
-	  * @param {string} corsHosts Array of hosts to permit in response to CORS pre-flight
-	  * @param {function|string} authenticate Authorization Authentication
+	  * @param {function} opts.log Send log messages to this function (Default: false)
+	  * @param {object} opts.datastore Datastore configuration options
+	  * @param {object} opts.pubsub Pubsub configuration options
+	  * @param {string} opts.corsHosts Array of hosts to permit in response to CORS pre-flight
+	  * @param {function|string} opts.authenticate Authorization Authentication
+	  * @param {boolean} opts.alwaysAuthenticate Call the authenticate function even if no authorization header is present
 	  * for http requests either a string to compare the token to, or a function that
 	  * receives either a bearer token or the full auth header and returns truthy if the request is authentic
 	  * If this value is truthy and no authenticate header is present, the server will respond with 401
@@ -384,10 +385,10 @@ class AirblastController {
 					token = tokens.join(' ');
 				}
 
-				const isAuthorized = token && await this.authenticate(token);
+				const isAuthorized = (this.options.alwaysAuthenticate || token) && await this.authenticate(token, req);
 
 				if (!isAuthorized) {
-					const message = token ?
+					const message = (token || this.options.alwaysAuthenticate) ?
 						'The authorization provided is not valid' :
 						'Authorization header is required';
 
